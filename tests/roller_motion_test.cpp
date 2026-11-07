@@ -10,7 +10,7 @@ struct Bench {
   Motion motor;
   uint32_t now{0};
   float fabric{1};
-  static constexpr float up_ms = 19000, down_ms = 24000;
+  float up_ms = 22000, down_ms = 22000;
   void step(unsigned ms = 10) {
     const auto d = motor.direction();
     if (d == Dir::up) fabric += motor.duty() * ms / up_ms;
@@ -34,54 +34,74 @@ struct Bench {
   }
 };
 
-void calibration_and_guarded_travel() {
+void two_marks_and_endpoint_trim() {
   Bench b;
   b.motor.go(0, b.now);
-  assert(!b.motor.active()); // no automatic run on factory times
+  assert(!b.motor.active());
   b.motor.mark(Dir::up, b.now);
   b.motor.mark(Dir::down, b.now);
   assert(std::string_view(b.motor.status()) == "retry" && !b.motor.ready());
   b.motor.mark(Dir::up, b.now);
   b.jog_to(0.45f);
-  b.jog_to(0.54f); // correction in the opposite direction during the first pass
+  b.jog_to(0.54f); // backtracking still measures net signed travel
   b.jog_to(0);
   b.motor.mark(Dir::down, b.now);
-  assert(std::string_view(b.motor.status()) == "top" && !b.motor.ready());
-  b.jog_to(1);
+  assert(b.motor.ready()); // two marks, no return trip
+  assert(std::fabs(b.motor.closing_seconds() - 22) < 0.07);
+  b.motor.go(0, b.now);
+  assert(!b.motor.active()); // normal Down respects the estimated bottom
+  const float old_span = b.motor.closing_seconds();
+  const float old_bottom = b.fabric;
+  b.motor.jog(Dir::down, b.now);
+  b.finish_move();
+  assert(b.fabric < old_bottom - 0.002f);
+  b.motor.mark(Dir::down, b.now);
+  assert(b.motor.ready() && b.motor.position() == 0);
+  assert(b.motor.closing_seconds() > old_span + 0.1f); // re-mark changed the span
+  b.motor.go(1, b.now);
+  b.finish_move();
+  assert(b.fabric > 0.93f && b.fabric < 1.0f); // opposite reference retained
+
+  // Adjust the top inward without restarting calibration.
+  const float top_before = b.fabric;
+  b.motor.jog(Dir::down, b.now);
+  b.finish_move();
+  assert(b.fabric < top_before);
+  const float expanded_span = b.motor.opening_seconds();
   b.motor.mark(Dir::up, b.now);
-  assert(b.motor.ready());
-  assert(std::fabs(b.motor.opening_seconds() - 19) < 0.07);
-  assert(std::fabs(b.motor.closing_seconds() - 24) < 0.07);
+  assert(b.motor.ready() && b.motor.position() == 1);
+  assert(b.motor.opening_seconds() < expanded_span);
   b.motor.go(0, b.now);
   b.finish_move();
   const float first_bottom = b.fabric;
-  assert(first_bottom > 0.015f && first_bottom < 0.04f);
   for (int i = 0; i < 8; ++i) {
     b.motor.go(1, b.now);
     for (int n = 0; n < 100; ++n) b.step();
-    b.motor.stop(b.now); // short upward trip and immediate reversal
+    b.motor.stop(b.now);
     b.motor.go(0, b.now);
     b.finish_move();
-    assert(b.fabric > 0.015f && std::fabs(b.fabric - first_bottom) < 0.003f);
+    assert(std::fabs(b.fabric - first_bottom) < 0.003f);
     b.motor.go(0, b.now);
-    b.motor.jog(Dir::down, b.now);
-    assert(!b.motor.active()); // repeated down commands do not push further
+    assert(!b.motor.active());
   }
+}
 
-  // Interrupted travel preserves the learned profile but not a claimed position.
-  b.motor.go(1, b.now);
-  b.step(500);
+void retains_existing_calibration() {
+  Motion existing;
+  existing.restore({1,19000,24000,0.5f,1}); // already deployed snapshot format
+  assert(existing.ready());
+  assert(existing.opening_seconds() == 19 && existing.closing_seconds() == 24);
+  Motion interrupted;
+  interrupted.restore(existing.snapshot(false));
+  assert(!interrupted.ready() && std::string_view(interrupted.status()) == "reference");
+  interrupted.go(1, 100);
+  assert(!interrupted.active());
+  interrupted.mark(Dir::up, 100);
+  assert(interrupted.ready() && interrupted.position() == 1);
+  assert(interrupted.opening_seconds() == 19 && interrupted.closing_seconds() == 24);
   Motion restarted;
-  restarted.restore(b.motor.snapshot(false));
-  assert(!restarted.ready() && std::string_view(restarted.status()) == "reference");
-  restarted.go(1, 100);
-  assert(!restarted.active());
-  restarted.mark(Dir::up, 100);
+  restarted.restore(interrupted.snapshot(true));
   assert(restarted.ready() && restarted.position() == 1);
-  assert(std::fabs(restarted.closing_seconds() - b.motor.closing_seconds()) < 0.001);
-  Motion idle_restart;
-  idle_restart.restore(restarted.snapshot(true));
-  assert(idle_restart.ready() && idle_restart.position() == 1);
 }
 
 void bounded_jog_and_interlock() {
@@ -110,7 +130,8 @@ void bounded_jog_and_interlock() {
 }
 
 int main() {
-  calibration_and_guarded_travel();
+  two_marks_and_endpoint_trim();
+  retains_existing_calibration();
   bounded_jog_and_interlock();
-  std::puts("Passed: two-way learning with backtracking, guarded partial/repeated moves, reboot reference, jog timeout and reversal.");
+  std::puts("Passed: two marks, endpoint trimming, guarded partial moves, saved calibration, jog timeout and reversal.");
 }

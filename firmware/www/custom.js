@@ -199,15 +199,16 @@ document.body.innerHTML = `
 // ── i18n ─────────────────────────────────────────────────────────
 const DICT = {
   en: {
+    calLocked:'Mark both ends to unlock Up/Down',
     calReset:'Start over',
     calResetAsk:'Clear the learned travel and start calibration again?',
     cal: {
-      unknown:'Reading calibration status…', first:'Jog to either end and mark that position.',
-      bottom:'Jog to your desired bottom, then tap Mark bottom.',
-      top:'Jog to your desired top, then tap Mark top.',
+      unknown:'Reading calibration status…', first:'Mark either end. Jog to the other end and mark it to unlock Up/Down.',
+      bottom:'Jog to your bottom and tap Mark bottom to finish.',
+      top:'Jog to your top and tap Mark top to finish.',
       retry:'That trip could not be measured. Return to the last marked end and mark it again.',
       reference:'Position lost during power-off. Jog to either marked end and mark it again.',
-      ready:'Ready. Normal travel stops just inside the marked ends.',
+      ready:'Ready. To adjust an end, nudge to the new position and mark it again.',
       storage_error:'Movement disabled: could not save the blind position.',
     },
     morning:'Morning', day:'Day', night:'Night', half:'Half',
@@ -221,15 +222,16 @@ const DICT = {
     st:{ opening:'opening', closing:'closing', adjusting:'adjusting', open:'open', closed:'closed', stopped:'stopped', connecting:'connecting' }
   },
   uk: {
+    calLocked:'Позначте обидві межі, щоб увімкнути рух',
     calReset:'Почати заново',
     calResetAsk:'Скинути калібрування та почати заново?',
     cal: {
-      unknown:'Зчитування калібрування…', first:'Перемістіть штору до одного краю і позначте його.',
+      unknown:'Зчитування калібрування…', first:'Позначте один край, потім перемістіть штору до іншого й позначте його.',
       bottom:'Перемістіть штору вниз і позначте нижнє положення.',
       top:'Перемістіть штору вгору і позначте верхнє положення.',
       retry:'Не вдалося виміряти рух. Поверніться до останньої позначки та позначте її знову.',
       reference:'Положення втрачено. Перемістіть штору до позначеного краю та позначте його знову.',
-      ready:'Готово. Штора зупиняється трохи раніше позначених меж.',
+      ready:'Готово. Щоб змінити межу, перемістіть штору й позначте її знову.',
       storage_error:'Рух заблоковано: не вдалося зберегти положення.',
     },
     morning:'Ранок', day:'День', night:'Ніч', half:'Пів',
@@ -292,6 +294,8 @@ function refreshStateWord() {
   let word;
   if (coverState === 'opening')      word = st.opening;
   else if (coverState === 'closing') word = st.closing;
+  else if (calibration === 'unknown') word = st.connecting;
+  else if (calibration !== 'ready')   word = d().calLocked;
   else if (isDragging)               word = st.adjusting;
   else if (pct >= 99)                word = st.open;
   else if (pct <= 1)                 word = st.closed;
@@ -301,6 +305,7 @@ function refreshStateWord() {
 
 function renderCalibration() {
   $('calibrationStatus').textContent = d().cal[calibration] || d().cal.unknown;
+  refreshStateWord();
   const enabled = calibration === 'ready';
   slider.disabled = !enabled;
   handle.setAttribute('aria-disabled', String(!enabled));

@@ -601,19 +601,22 @@ it again. Take your time and read as you go.
   1. Open the web page, then Settings (the sliders icon).
   2. Use Nudge up/down to reach the safe top. Tap "Mark top". You can
      start at the bottom instead and reverse the remaining steps.
-  3. Jog to the safe bottom and tap "Mark bottom".
-  4. Jog back to the safe top and tap "Mark top" again. The return trip
-     measures the other direction. You don't need to enter travel times.
-  5. When Settings says Ready, try the normal controls while watching
-     the blind. Normal movement stops slightly inside the marked ends.
-     If necessary, use Start over and teach the endpoints again.
+  3. Jog to the safe bottom and tap "Mark bottom". The status now says
+     Ready and Up/Down are enabled. No return trip or stopwatch is required.
+  4. Try the normal controls while watching the blind. Normal movement
+     stops inside the marks. The reverse direction uses a larger margin
+     until calibrated travel is available for it.
 
   A short tap jogs for a bounded step. Holding extends the move; release
   to stop. If the connection drops, the controller stops the jog itself.
 
-  Once calibrated, a mark re-anchors the estimate without erasing the
-  learned travel. Start over clears the learned travel. If power was lost
-  during a move, jog to a marked end and mark it again before normal use.
+  To change either endpoint, use short Nudge taps while watching the blind,
+  then mark that end again. Normal Up/Down stop at the estimated bounds;
+  Nudge allows a bounded adjustment beyond the old mark. Marking an end
+  adjusts its span relative to the opposite end without Start over.
+
+  If power was lost during a move, jog to a marked end and mark it again
+  before normal use.
 
 -------------------------------------------------------------------------------
  10. EVERYDAY USE
@@ -723,10 +726,10 @@ it again. Take your time and read as you go.
 
   BLIND SAYS 100% (OR 0%) BUT STOPS JUST INSIDE THE MARK
     A small margin is intentional. If it consistently stops much too far
-    away, use Start over and calibrate again while watching the blind.
+    away, nudge to the desired physical endpoint and mark it again.
 
   POSITION DRIFTS OVER TIME
-    Use Start over in Settings and repeat section 9.
+    Nudge to the desired endpoint and mark it again; see section 9.
 
   CONNECTION DROPS / WIRELESS UPDATES FAIL
     Check signal strength in the device log. Below about -75 dB the

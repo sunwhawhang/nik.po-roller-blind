@@ -51,8 +51,8 @@ whenever a released file changes, don't add a zip to the tree.
 - The portable motion model lives in firmware/roller_motion.h. ESPHome
   applies its motor commands, persists calibration, and exposes the same
   controller to the web UI and Home Assistant.
-- Two measured traversals learn both directions. Ordinary moves and jogs
-  obey guarded estimated endpoints after calibration.
+- A single trip between the two marks unlocks ordinary moves. Manual jogs
+  allow bounded endpoint adjustment; normal moves obey guarded estimates.
 - Physical buttons move or stop after calibration; the original
   Home Assistant event names are retained.
 - Test the host motion model and compile ESP32-C3 firmware before committing.

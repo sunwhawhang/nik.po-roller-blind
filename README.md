@@ -14,8 +14,8 @@ internet goes down.
   full position control
 - **Built-in web interface** — control it from any browser on your network,
   Home Assistant or not
-- **Guided calibration** — jog to the physical ends and mark them. A return
-  trip learns the other direction. No manual travel-time entry.
+- **Guided calibration** — jog to the physical ends and mark them. A
+  single trip is enough. Nudge and re-mark either end to adjust it.
 - **Physical buttons** — once calibrated, press to move or stop.
 - **Estimated travel limits** — normal moves and jogs stop slightly inside
   the marks. The controller estimates position without sensors.
@@ -81,11 +81,13 @@ hardware/wiring/
 
 ## Calibrate in the web interface
 
-In Settings, jog to a safe top position, mark top, jog down and mark bottom,
-then jog up and mark top again. Starting at the bottom also works. The two
-legs teach the opening and closing estimates separately. Normal motion is
-locked until calibration is complete. After power loss during a move, mark a
-known physical endpoint to resume normal motion.
+Mark either end in Settings, jog to the opposite end and mark it. Up/Down
+unlock after those two marks. Use Nudge and re-mark an end to adjust it
+without starting over. The other end remains the reference.
+
+A single trip measures motor drive in one direction and estimates the other.
+The estimated direction has a larger stopping margin. After power loss
+during a move, mark a known physical endpoint to resume normal motion.
 
 The estimate can drift. Start with supervised moves, and use physical limit
 sensors if you need a hard cutoff.

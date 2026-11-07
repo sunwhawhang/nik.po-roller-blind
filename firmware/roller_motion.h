@@ -20,6 +20,7 @@ class Motion {
  public:
   static constexpr uint32_t kJogMs = 500;
   static constexpr uint32_t kRunMaxMs = 120000;
+  static constexpr float kTrim = 0.20f;  // bounded manual adjustment beyond an old mark
 
   bool ready() const { return profile() && known_; }
   bool profile() const { return opening_ > 0 && closing_ > 0; }
@@ -42,15 +43,19 @@ class Motion {
   }
 
   Snapshot snapshot(bool stopped) const {
-    return {1, opening_, closing_, physical_, static_cast<uint32_t>(stopped && ready())};
+    const uint32_t flags = (learned_ << 1) | static_cast<uint32_t>(stopped && ready());
+    return {2, opening_, closing_, physical_, flags};
   }
   void restore(const Snapshot &s) {
-    if (s.version != 1 || !valid_span(s.opening) || !valid_span(s.closing) ||
-        !std::isfinite(s.position) || s.position < 0 || s.position > 1) return;
+    if ((s.version != 1 && s.version != 2) || !valid_span(s.opening) || !valid_span(s.closing) ||
+        !std::isfinite(s.position) || s.position < -kTrim || s.position > 1 + kTrim) return;
+    const uint32_t learned = s.version == 1 ? 3 : s.known >> 1;
+    if (learned == 0 || learned > 3) return;
     opening_ = s.opening;
     closing_ = s.closing;
     physical_ = s.position;
-    known_ = s.known == 1;
+    learned_ = learned;
+    known_ = (s.known & 1) != 0;
   }
 
   bool take_save() {
@@ -68,7 +73,7 @@ class Motion {
       if (ready()) {
         physical_ = std::clamp(physical_ + (direction_ == Dir::up ? travel / opening_
                                                                 : -travel / closing_),
-                               0.0f, 1.0f);
+                               -kTrim, 1.0f + kTrim);
       } else if (!ready()) {
         if (anchor_ != Dir::off && !profile()) (direction_ == Dir::up ? leg_.up : leg_.down) += travel;
         leg_motor_ms_ += elapsed;
@@ -76,7 +81,8 @@ class Motion {
     }
     if ((!target_mode_ && now - last_jog_ >= kJogMs) ||
         now - started_ >= kRunMaxMs ||
-        (ready() && reached()) || (leg_motor_ms_ >= kRunMaxMs && !ready())) {
+        (ready() && (target_mode_ ? reached() : trim_exhausted(direction_))) ||
+        (leg_motor_ms_ >= kRunMaxMs && !ready())) {
       end();
       return;
     }
@@ -104,14 +110,13 @@ class Motion {
   void jog(Dir dir, uint32_t now) {
     tick(now);
     if (failed_ || dir == Dir::off || (!ready() && leg_motor_ms_ >= kRunMaxMs)) return;
-    if (ready() && (dir == Dir::up ? physical_ >= high() : physical_ <= low())) {
+    if (ready() && trim_exhausted(dir)) {
       end();
       return;
     }
     begin(dir, now);
     target_mode_ = false;
     last_jog_ = now;
-    target_ = dir == Dir::up ? high() : low();
   }
 
   void stop(uint32_t now) { tick(now); end(); }
@@ -121,7 +126,8 @@ class Motion {
     known_ = false;
     opening_ = closing_ = 0;
     anchor_ = Dir::off;
-    leg_ = open_leg_ = close_leg_ = {};
+    learned_ = 0;
+    leg_ = {};
     leg_motor_ms_ = 0;
     invalid_ = false;
     save_ = true;
@@ -138,6 +144,14 @@ class Motion {
     if (failed_ || edge == Dir::off) return;
     const float position = edge == Dir::up ? 1.0f : 0.0f;
     if (profile()) {
+      if (known_) {
+        // The new mark moves this end of the span; preserve the opposite mark.
+        // Use the raw estimate, including any manual jog beyond the old mark.
+        const float scale = edge == Dir::up ? physical_ : 1.0f - physical_;
+        if (!valid_span(opening_ * scale) || !valid_span(closing_ * scale)) return;
+        opening_ *= scale;
+        closing_ *= scale;
+      }
       physical_ = position;
       known_ = true;
       save_ = true;
@@ -145,27 +159,17 @@ class Motion {
     }
     invalid_ = false;
     if (anchor_ != Dir::off && edge != anchor_) {
-      if (leg_motor_ms_ >= kRunMaxMs || (edge == Dir::up ? leg_.up : leg_.down) < 1000) {
+      const float span = edge == Dir::up ? leg_.up - leg_.down : leg_.down - leg_.up;
+      if (leg_motor_ms_ >= kRunMaxMs || !valid_span(span)) {
         invalid_ = true;
         return;
       }
-      (edge == Dir::up ? open_leg_ : close_leg_) = leg_;
-      if (open_leg_.up > 0 && close_leg_.down > 0) {
-        // Each full traversal is one unit of signed travel. Solve the
-        // two equations together to allow small jogs back in either leg.
-        const float determinant = open_leg_.up * close_leg_.down - close_leg_.up * open_leg_.down;
-        const float opening = determinant / (open_leg_.down + close_leg_.down);
-        const float closing = determinant / (open_leg_.up + close_leg_.up);
-        if (!valid_span(opening) || !valid_span(closing)) {
-          open_leg_ = close_leg_ = {};
-          invalid_ = true;
-        } else {
-          opening_ = opening;
-          closing_ = closing;
-          known_ = true;
-          save_ = true;
-        }
-      }
+      // One trip provides a span and measures one direction. Use the same
+      // estimated span in the other direction, with a larger stopping margin.
+      opening_ = closing_ = span;
+      learned_ = edge == Dir::up ? 1 : 2;
+      known_ = true;
+      save_ = true;
     }
     physical_ = position;
     anchor_ = edge;
@@ -176,9 +180,13 @@ class Motion {
  private:
   struct Leg { float up{}, down{}; };
   static bool valid_span(float n) { return std::isfinite(n) && n >= 1000 && n <= kRunMaxMs; }
-  static float margin(float duration) { return std::min(0.24f, std::max(0.02f, 250.0f / duration)); }
-  float low() const { return profile() ? margin(closing_) : 0; }
-  float high() const { return profile() ? 1 - margin(opening_) : 1; }
+  static float margin(float duration, bool measured) {
+    return std::min(0.24f, std::max(measured ? 0.005f : 0.05f,
+                                   (measured ? 250.0f : 500.0f) / duration));
+  }
+  float low() const { return profile() ? margin(closing_, learned_ & 2) : 0; }
+  float high() const { return profile() ? 1 - margin(opening_, learned_ & 1) : 1; }
+  bool trim_exhausted(Dir dir) const { return dir == Dir::up ? physical_ >= 1 + kTrim : physical_ <= -kTrim; }
   bool reached() const { return direction_ == Dir::up ? physical_ >= target_ : physical_ <= target_; }
   void end() { direction_ = Dir::off; duty_ = 0; }
   void begin(Dir dir, uint32_t now) {
@@ -192,7 +200,8 @@ class Motion {
   bool known_{}, target_mode_{}, invalid_{}, save_{}, failed_{};
   uint32_t started_{}, last_{}, last_jog_{}, leg_motor_ms_{};
   float opening_{}, closing_{}, physical_{0.5f}, target_{}, duty_{};
-  Leg leg_, open_leg_, close_leg_;
+  uint32_t learned_{};
+  Leg leg_;
 };
 inline Motion &controller() {
   static Motion motion;

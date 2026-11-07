@@ -272,3 +272,6 @@ input[type=range]::-moz-range-thumb {
 [data-nudge] { touch-action: none; user-select: none; }
 button:disabled, input:disabled { opacity: 0.45; cursor: default; }
 #handle[aria-disabled="true"] { cursor: default; }
+
+/* Space between the nudge controls and the endpoint marks. */
+.cal-grid + .cal-grid { margin-top: 12px; }

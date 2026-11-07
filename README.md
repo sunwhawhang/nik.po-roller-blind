@@ -16,7 +16,8 @@ internet goes down.
   Home Assistant or not
 - **Guided calibration** — jog to the physical ends and mark them. A
   single trip is enough. Nudge and re-mark either end to adjust it.
-- **Physical buttons** — once calibrated, press to move or stop.
+- **Physical buttons** — tap or hold to jog before calibration; press to
+  move or stop once calibrated.
 - **Estimated travel limits** — normal moves and jogs stop slightly inside
   the marks. The controller estimates position without sensors.
 - **Reverse switches for motor and buttons** — wired something backwards?

@@ -203,9 +203,9 @@ const DICT = {
     calReset:'Start over',
     calResetAsk:'Clear the learned travel and start calibration again?',
     cal: {
-      unknown:'Reading calibration status…', first:'Mark either end. Jog to the other end and mark it to unlock Up/Down.',
-      bottom:'Jog to your bottom and tap Mark bottom to finish.',
-      top:'Jog to your top and tap Mark top to finish.',
+      unknown:'Reading calibration status…', first:'Use the physical buttons or Nudge to reach either end and mark it. Move to the other end and mark it to enable full travel.',
+      bottom:'Move to your bottom and tap Mark bottom to finish.',
+      top:'Move to your top and tap Mark top to finish.',
       retry:'That trip could not be measured. Return to the last marked end and mark it again.',
       reference:'Position lost during power-off. Jog to either marked end and mark it again.',
       ready:'Ready. To adjust an end, nudge to the new position and mark it again.',

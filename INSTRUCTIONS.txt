@@ -599,13 +599,16 @@ it again. Take your time and read as you go.
   stops. Do not run the fabric against a stop.
 
   1. Open the web page, then Settings (the sliders icon).
-  2. Use Nudge up/down to reach the safe top. Tap "Mark top". You can
+  2. Use the physical buttons or Nudge to reach the safe top. Tap "Mark top". You can
      start at the bottom instead and reverse the remaining steps.
   3. Jog to the safe bottom and tap "Mark bottom". The status now says
      Ready and Up/Down are enabled. No return trip or stopwatch is required.
   4. Try the normal controls while watching the blind. Normal movement
      stops inside the marks. The reverse direction uses a larger margin
      until calibrated travel is available for it.
+
+  Before calibration, a physical button tap jogs one short step. Hold it
+  to move farther, then release to stop. The web Nudge buttons also work.
 
   A short tap jogs for a bounded step. Holding extends the move; release
   to stop. If the connection drops, the controller stops the jog itself.

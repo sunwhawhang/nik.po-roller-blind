@@ -129,9 +129,46 @@ void bounded_jog_and_interlock() {
   assert(!m.active() && m.duty() == 0);
 }
 
+void physical_buttons_before_calibration() {
+  Bench b;
+  b.motor.press_physical(Dir::up, false, false, b.now);
+  assert(b.motor.active() && b.motor.direction() == Dir::up);
+  b.step(70);
+  b.motor.poll_physical(false, false, b.now); // tap released before motor start
+  for (int n = 0; n < 44; ++n) b.step();
+  assert(!b.motor.active() && b.fabric > 1.002f);
+
+  b.motor.press_physical(Dir::down, false, false, b.now);
+  for (int n = 0; n < 100; ++n) {
+    b.step();
+    b.motor.poll_physical(false, true, b.now);
+  }
+  assert(b.motor.active() && b.motor.duty() == 1.0f);
+  b.motor.poll_physical(false, false, b.now);
+  assert(!b.motor.active() && b.motor.duty() == 0);
+
+  b.motor.press_physical(Dir::up, true, false, b.now);
+  assert(b.motor.direction() == Dir::down);
+  b.motor.poll_physical(true, true, b.now);
+  assert(!b.motor.active());
+  b.motor.poll_physical(true, false, b.now);
+  assert(!b.motor.active()); // releasing only one of two buttons cannot restart
+
+  b.motor.press_physical(Dir::up, false, false, b.now);
+  b.step(400);
+  b.motor.mark(Dir::up, b.now);
+  b.motor.poll_physical(true, false, b.now);
+  assert(!b.motor.active()); // marking an end cancels the physical hold
+  b.motor.press_physical(Dir::down, false, false, b.now);
+  b.motor.stop(b.now);
+  b.motor.poll_physical(false, true, b.now);
+  assert(!b.motor.active());
+}
+
 int main() {
   two_marks_and_endpoint_trim();
   retains_existing_calibration();
   bounded_jog_and_interlock();
-  std::puts("Passed: two marks, endpoint trimming, guarded partial moves, saved calibration, jog timeout and reversal.");
+  physical_buttons_before_calibration();
+  std::puts("Passed: two marks, endpoint trimming, guarded partial moves, saved calibration, jog timeout, reversal and pre-calibration physical controls.");
 }

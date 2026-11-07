@@ -19,6 +19,7 @@ struct Snapshot {
 class Motion {
  public:
   static constexpr uint32_t kJogMs = 500;
+  static constexpr uint32_t kPhysicalHoldMs = 300;
   static constexpr uint32_t kRunMaxMs = 120000;
   static constexpr float kTrim = 0.20f;  // bounded manual adjustment beyond an old mark
 
@@ -108,6 +109,47 @@ class Motion {
   }
 
   void jog(Dir dir, uint32_t now) {
+    physical_button_ = Dir::off;
+    jog_pulse(dir, now);
+  }
+
+  // A short physical press gets the same bounded pulse as a web nudge.
+  // A hold keeps the pulse alive only while the debounced input stays down.
+  void press_physical(Dir button, bool swapped, bool both, uint32_t now) {
+    if (ready() || button == Dir::off) return;
+    if (both) {
+      stop(now);
+      return;
+    }
+    physical_button_ = button;
+    physical_direction_ = swapped ? (button == Dir::up ? Dir::down : Dir::up) : button;
+    physical_pressed_at_ = now;
+    jog_pulse(physical_direction_, now);
+  }
+
+  void poll_physical(bool up, bool down, uint32_t now) {
+    if (physical_button_ == Dir::off) return;
+    const bool held = physical_button_ == Dir::up ? up : down;
+    const bool other = physical_button_ == Dir::up ? down : up;
+    const bool long_press = now - physical_pressed_at_ >= kPhysicalHoldMs;
+    if (!held || other || ready()) {
+      physical_button_ = Dir::off;
+      if (other || ready() || long_press) stop(now);
+      return;
+    }
+    // Stop and calibration commands clear physical_button_. A timeout must
+    // not be able to restart a move while a physical button is still held.
+    if (long_press && active()) jog_pulse(physical_direction_, now);
+  }
+
+  void stop(uint32_t now) {
+    physical_button_ = Dir::off;
+    tick(now);
+    end();
+  }
+
+ private:
+  void jog_pulse(Dir dir, uint32_t now) {
     tick(now);
     if (failed_ || dir == Dir::off || (!ready() && leg_motor_ms_ >= kRunMaxMs)) return;
     if (ready() && trim_exhausted(dir)) {
@@ -119,8 +161,7 @@ class Motion {
     last_jog_ = now;
   }
 
-  void stop(uint32_t now) { tick(now); end(); }
-
+ public:
   void reset(uint32_t now) {
     stop(now);
     known_ = false;
@@ -197,6 +238,8 @@ class Motion {
   }
 
   Dir direction_{Dir::off}, anchor_{Dir::off};
+  Dir physical_button_{Dir::off}, physical_direction_{Dir::off};
+  uint32_t physical_pressed_at_{};
   bool known_{}, target_mode_{}, invalid_{}, save_{}, failed_{};
   uint32_t started_{}, last_{}, last_jog_{}, leg_motor_ms_{};
   float opening_{}, closing_{}, physical_{0.5f}, target_{}, duty_{};

@@ -29,6 +29,7 @@ esphome:
           auto &m = roller::controller();
           const uint32_t now = millis();
           m.tick(now);
+          m.poll_physical(id(physical_up).state, id(physical_down).state, now);
           const bool was_active = id(motion_active);
           if (m.active() && !was_active && m.ready()) {
             // Mark the reference unknown on disk before applying any PWM.
@@ -189,17 +190,22 @@ script:
     then:
       - if:
           condition:
-            lambda: 'return roller::controller().active();'
+            lambda: 'return !roller::controller().ready();'
           then:
-            - lambda: 'roller::controller().stop(millis());'
-            - homeassistant.event:
-                event: esphome.roller_master_stop
-                data: {}
+            - lambda: |-
+                roller::controller().press_physical(
+                    raw_up ? roller::Dir::up : roller::Dir::down,
+                    id(swap_buttons), id(physical_up).state && id(physical_down).state, millis());
           else:
             - if:
                 condition:
-                  lambda: 'return roller::controller().ready();'
+                  lambda: 'return roller::controller().active();'
                 then:
+                  - lambda: 'roller::controller().stop(millis());'
+                  - homeassistant.event:
+                      event: esphome.roller_master_stop
+                      data: {}
+                else:
                   - if:
                       condition:
                         lambda: 'return raw_up != id(swap_buttons);'
@@ -217,6 +223,7 @@ script:
 binary_sensor:
   - platform: gpio
     name: Button Up
+    id: physical_up
     pin:
       number: GPIO20
       mode:
@@ -232,6 +239,7 @@ binary_sensor:
           raw_up: true
   - platform: gpio
     name: Button Down
+    id: physical_down
     pin:
       number: GPIO21
       mode:

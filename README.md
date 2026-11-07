@@ -1,5 +1,7 @@
 # Smart Roller Blind Motor
 
+Modified fork of [nik-po’s original project](https://github.com/nik-po/nik.po-roller-blind).
+
 A DIY motorized roller blind unit built around an ESP32-C3, a TB6612FNG
 motor driver, and a 12V worm gear motor — running [ESPHome](https://esphome.io)
 and integrating natively with [Home Assistant](https://www.home-assistant.io/).
@@ -12,11 +14,11 @@ internet goes down.
   full position control
 - **Built-in web interface** — control it from any browser on your network,
   Home Assistant or not
-- **Physical buttons** — short press opens/closes fully, press again to stop
-  anywhere; long-press at either end fine-tunes calibration without touching
-  a computer
-- **Manual nudge** — correct drift at either end even when the firmware
-  thinks there's nowhere left to travel
+- **Guided calibration** — jog to the physical ends and mark them. A return
+  trip learns the other direction. No manual travel-time entry.
+- **Physical buttons** — once calibrated, press to move or stop.
+- **Estimated travel limits** — normal moves and jogs stop slightly inside
+  the marks. The controller estimates position without sensors.
 - **Reverse switches for motor and buttons** — wired something backwards?
   Flip a toggle instead of re-soldering
 - **OTA updates** — flash once over USB, update over WiFi from then on
@@ -41,8 +43,8 @@ internet goes down.
 | Silicone wire 26AWG + heat shrink | $2.00 |
 | **Total, per blind** | **under $20.00** |
 
-No encoders or limit switches — position is tracked by time, calibrated
-once from the physical buttons or the web interface.
+This fork keeps the original hardware and wiring. The web setup learns
+travel in each direction from the motor drive during calibration.
 
 You'll also need a printed enclosure to hold it all together. The STL,
 photos, and an illustrated step-by-step assembly PDF are on
@@ -57,10 +59,9 @@ flashing, generating your own security keys, soldering, WiFi setup, and
 calibration, written for someone who has never flashed a microcontroller
 before.
 
-Prefer a ready-to-download bundle (firmware config + web UI + wiring
-diagram + the same guide, all in one folder)? Grab the zip from the
-[latest release](../../releases/latest) instead of assembling it from the
-source tree yourself.
+Use this fork's source tree. Keep `firmware/roller_motion.h` and
+`firmware/www/` beside the YAML. Upstream release ZIPs do not include this
+fork's calibration.
 
 The wiring diagram alone lives at [`hardware/wiring/wiring-diagram.svg`](hardware/wiring/wiring-diagram.svg) —
 open it in any browser.
@@ -78,9 +79,23 @@ hardware/wiring/
   wiring-diagram.svg       soldering diagram
 ```
 
-This tree holds the source files; the packaged download on the
-[Releases page](../../releases) is built from these same files, just
-gathered into one flat folder for convenience.
+## Calibrate in the web interface
+
+In Settings, jog to a safe top position, mark top, jog down and mark bottom,
+then jog up and mark top again. Starting at the bottom also works. The two
+legs teach the opening and closing estimates separately. Normal motion is
+locked until calibration is complete. After power loss during a move, mark a
+known physical endpoint to resume normal motion.
+
+The estimate can drift. Start with supervised moves, and use physical limit
+sensors if you need a hard cutoff.
+
+### Validate the motion model
+
+```sh
+clang++ -std=c++17 -I firmware tests/roller_motion_test.cpp -o /tmp/roller-motion-test
+/tmp/roller-motion-test
+```
 
 ## Firmware note
 

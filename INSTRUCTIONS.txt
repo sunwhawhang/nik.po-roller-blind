@@ -35,24 +35,11 @@ it again. Take your time and read as you go.
   1. WHAT IS IN THIS DOWNLOAD
 -------------------------------------------------------------------------------
 
-  Don't see roller-blind.yaml, wiring-diagram.svg and www/ sitting right
-  next to this file? Then what you have is this GitHub repo's source
-  tree, not the packaged download - the same files, but split into
-  firmware/, hardware/wiring/, etc. for editing rather than flashing.
-  Go to the Releases page and grab the zip there instead; it has the
-  flat layout described below, ready to unzip and use as-is.
-
-  roller-blind/
-    |
-    +-- INSTRUCTIONS.txt      <- this file
-    +-- roller-blind.yaml     <- the firmware configuration
-    +-- wiring-diagram.svg    <- soldering diagram (open in any browser)
-    +-- www/
-          +-- custom.css      <- the built-in web interface
-          +-- custom.js
-
-  Keep this folder structure exactly as it is. The "www" folder must stay
-  next to roller-blind.yaml, or the web interface will not be included.
+  Use this fork's source tree. Copy firmware/roller-motor-dist.yaml to
+  firmware/roller-blind.yaml for your private keys. Keep roller_motion.h
+  and www/ next to it. Run the firmware commands from that folder.
+  The upstream release ZIP does not contain this fork's calibration.
+  The wiring diagram is at hardware/wiring/wiring-diagram.svg.
 
   Open wiring-diagram.svg by dragging it into a browser window. It prints
   well on A4 if you want it on the bench next to you.
@@ -348,14 +335,6 @@ it again. Take your time and read as you go.
   when it first discovers the blind.
 
 
-  OPTIONAL: STARTING TRAVEL TIME RANGE
-
-  "duration_max" near the top of roller-blind.yaml sets where the
-  Open/Close Duration sliders top out on a brand new device. 45 seconds
-  suits most blinds, and you can change it later from the "Duration
-  Range" control without reflashing - see section 9.
-
-
   OPTIONAL: NAME YOUR BLIND
   ---------------------------------------------------------------------
 
@@ -512,10 +491,9 @@ it again. Take your time and read as you go.
       with a position and a percentage.
     - The dot next to the theme button is lit, not grey - that means
       the page is receiving live updates from the board.
-    - Dragging the slider or tapping a preset changes the number on
-      screen. It will not move anything for real yet - there is no
-      motor connected - you are only confirming the command reaches
-      the board.
+    - Settings shows the first calibration step. On an uncalibrated board
+      the normal positioning controls are disabled. Wait until the motor
+      and blind are assembled before using the calibration controls.
 
   Using Home Assistant? Also confirm the blind appeared under Settings
   -> Devices & Services and that entering the encryption key you
@@ -616,143 +594,37 @@ it again. Take your time and read as you go.
   9. CALIBRATION
 -------------------------------------------------------------------------------
 
-  There are no encoders or limit switches in this design. The blind
-  tracks its position BY TIME: you teach it how many seconds a full open
-  and a full close take, and it calculates everything from that.
+  Travel is estimated from the motor drive. There are no position sensors.
+  Watch the blind during calibration and choose positions before mechanical
+  stops. Do not run the fabric against a stop.
 
-  Is it perfectly precise? No. Is it precise enough for a window blind?
-  Absolutely - the worm gear does not drift under load, and positions
-  stay accurate within a percent or two.
+  1. Open the web page, then Settings (the sliders icon).
+  2. Use Nudge up/down to reach the safe top. Tap "Mark top". You can
+     start at the bottom instead and reverse the remaining steps.
+  3. Jog to the safe bottom and tap "Mark bottom".
+  4. Jog back to the safe top and tap "Mark top" again. The return trip
+     measures the other direction. You don't need to enter travel times.
+  5. When Settings says Ready, try the normal controls while watching
+     the blind. Normal movement stops slightly inside the marked ends.
+     If necessary, use Start over and teach the endpoints again.
 
-  FIRST CALIBRATION
-  ---------------------------------------------------------------------
+  A short tap jogs for a bounded step. Holding extends the move; release
+  to stop. If the connection drops, the controller stops the jog itself.
 
-    1. Open the web interface (section 7) and tap the sliders icon in
-       the top-right corner to open Settings.
-    2. Move the blind by hand or with the buttons until it is fully
-       CLOSED, then press "CAL bottom".
-    3. Move it until it is fully OPEN, then press "CAL top".
-
-  That tells it where the two ends are. Then set the travel times:
-
-    4. Still in Settings, use the +/- buttons next to "Open time" and
-       "Close time" until they roughly match how long a full travel
-       actually takes. Time it with a stopwatch once and enter that.
-
-  NUDGE: MOVING THE BLIND WHEN IT THINKS IT IS ALREADY AT THE END
-  ---------------------------------------------------------------------
-
-  Sooner or later the blind will report 100% while it is clearly still a
-  few centimetres short of the top - or report 0% while it could still
-  go lower. The normal up/down controls will not help, because as far as
-  the firmware is concerned there is nowhere left to travel.
-
-  That is what "Nudge up" and "Nudge down" are for. You will find them
-  in Settings, under MANUAL NUDGE, and also as buttons in Home
-  Assistant.
-
-    - Each tap runs the motor for one short step (0.5 seconds by
-      default).
-    - HOLD the button and it keeps travelling, stopping one step after
-      you let go.
-    - Nudging works at any position, including both ends.
-
-  Important: nudging does NOT change the reported position and does NOT
-  change your calibration. It only moves the physical blind. That is
-  deliberate - it lets you correct the blind without disturbing settings
-  that took you time to get right.
-
-  So the repair procedure for a drifted blind is:
-
-    1. Nudge until the blind is physically where it should be.
-    2. Press "CAL top" (or "CAL bottom") to tell the firmware that this
-       position is now 100% (or 0%).
-
-  You can change the step size with "Nudge step" in Settings - anywhere
-  from 0.1 to 5 seconds. Smaller is more precise; larger covers more
-  distance per tap. If you set it below about 0.3 seconds, holding the
-  button will move in visible steps rather than smoothly.
-
-  MAKING THE DURATION SLIDERS EASIER TO SET
-  ---------------------------------------------------------------------
-
-  Home Assistant draws Open/Close Duration as sliders spanning their full
-  range. If that range is much wider than your blind needs, the useful
-  part is only a few pixels across and setting 20.5 s exactly becomes
-  guesswork.
-
-  "Duration Range" (in Settings, and in Home Assistant) sets that upper
-  limit - anywhere from 20 to 120 seconds. Set it just above your
-  blind's real travel time and the sliders become far easier to aim.
-
-  Two things to know:
-
-    - Changing it restarts the blind, about ten seconds after you let go
-      of the slider. This is unavoidable: Home Assistant reads a
-      number's limits only when it connects to the device, so nothing
-      short of a reconnect will refresh them. The restart is skipped
-      while the blind is moving.
-
-    - Lowering the range below a stored travel time trims that time to
-      fit. Raising it again does not bring the old value back, so note
-      your times before making the range much smaller.
-
-
-  >>> DO NOT HOLD A NUDGE AGAINST A PHYSICAL STOP <<<
-
-  Nudging deliberately ignores the software limits, which means nothing
-  stops you from driving the blind into its own end stop and holding it
-  there. The worm gear motor will happily stall, drawing high current
-  and heating up the driver. Nudge in short taps near the ends, and stop
-  as soon as the blind stops moving.
-
-
-  FINE-TUNING FROM THE PHYSICAL BUTTONS
-  ---------------------------------------------------------------------
-
-  Once it is roughly right, you never need a computer again:
-
-    - When the blind is already fully open, HOLD the up button. The
-      motor keeps nudging further. Release it the moment it reaches the
-      real physical stop.
-    - Same with the down button when fully closed.
-
-  The extra run time is added to the stored duration automatically, so
-  0% and 100% now match the true physical limits. Takes ten seconds.
-
-  (Total travel time is capped at 120 seconds.)
-
+  Once calibrated, a mark re-anchors the estimate without erasing the
+  learned travel. Start over clears the learned travel. If power was lost
+  during a move, jog to a marked end and mark it again before normal use.
 
 -------------------------------------------------------------------------------
  10. EVERYDAY USE
 -------------------------------------------------------------------------------
+  Press either physical button to move in its direction when idle, or
+  press either while moving to stop. The web controls and optional Home
+  Assistant cover use the same estimated travel limits.
 
-  PHYSICAL BUTTONS
-
-    Short press (under 1 second)
-      Up    - opens fully. Press again while moving to stop anywhere.
-      Down  - closes fully. Press again while moving to stop anywhere.
-
-    Long press (1 second or more), only at the very top or bottom
-      Fine-tunes the end position - see section 9.
-
-  WEB INTERFACE
-
-    - Drag the blind itself up and down, or use the slider.
-    - Four presets: Morning 70%, Day 100%, Night 0%, Half 50%.
-    - Up / Stop / Down buttons.
-    - Three visual themes (the circle icon) and English / Ukrainian
-      (the EN button).
-    - Settings (the sliders icon): reverse switches, travel times,
-      nudge controls and calibration.
-
-  HOME ASSISTANT
-
-    The blind appears as a cover entity with full position control. You
-    can group several blinds together, or automate them to follow the
-    sun. Everything runs locally - no cloud, no account, no
-    subscription. It keeps working if your internet goes down.
-
+  Timing can drift if the fabric slips, speed varies, or the motor stalls.
+  This software does not detect a physical stop. Use limit sensors if you
+  need a hardware cutoff.
 
 -------------------------------------------------------------------------------
  11. UPDATING LATER
@@ -842,20 +714,19 @@ it again. Take your time and read as you go.
     enter its IP address.
 
   BLIND MOVES THE WRONG WAY
-    Open Settings in the web interface and turn on "Reverse Motor".
-    No rewiring needed.
+    The ESPHome "Reverse Motor" switch changes the motor direction and
+    clears calibration. The web "Reverse buttons" toggle only swaps the
+    two physical button assignments.
 
   BUTTONS DO THE OPPOSITE OF WHAT THEY SHOULD
     Open Settings and turn on "Reverse Buttons".
 
-  BLIND SAYS 100% (OR 0%) BUT IS NOT ACTUALLY AT THE END
-    Use "Nudge up" / "Nudge down" in Settings - they move the motor even
-    when the firmware thinks there is nowhere left to go. Then press
-    "CAL top" or "CAL bottom" to re-sync. See section 9.
+  BLIND SAYS 100% (OR 0%) BUT STOPS JUST INSIDE THE MARK
+    A small margin is intentional. If it consistently stops much too far
+    away, use Start over and calibrate again while watching the blind.
 
   POSITION DRIFTS OVER TIME
-    Recalibrate - section 9. A long press at each end takes ten seconds
-    and fixes it.
+    Use Start over in Settings and repeat section 9.
 
   CONNECTION DROPS / WIRELESS UPDATES FAIL
     Check signal strength in the device log. Below about -75 dB the

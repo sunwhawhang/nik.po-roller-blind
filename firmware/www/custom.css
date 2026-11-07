@@ -265,3 +265,10 @@ input[type=range]::-moz-range-thumb {
   z-index:9; pointer-events:none;
 }
 #toast.show { transform:translateX(-50%) translateY(0); }
+
+/* Guided travel calibration */
+#calibrationStatus { margin: 0.4rem 0 0.8rem; min-height: 2.4em; }
+.calibration-reset { margin: 0.3rem 1rem 0.7rem; }
+[data-nudge] { touch-action: none; user-select: none; }
+button:disabled, input:disabled { opacity: 0.45; cursor: default; }
+#handle[aria-disabled="true"] { cursor: default; }

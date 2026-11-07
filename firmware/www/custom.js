@@ -28,14 +28,12 @@ document.title = 'Blind';
 const NAME = {
   cover:    'Blind',
   swap:     'Swap Buttons',
-  openTime: 'Open Duration',
-  closeTime:'Close Duration',
   calOpen:  'Calibrate Open',
   calClose: 'Calibrate Closed',
+  calReset: 'Start Calibration',
+  calStatus:'Calibration Status',
   nudgeUp:  'Nudge Up',
   nudgeDn:  'Nudge Down',
-  nudgeStep:'Nudge Step',
-  durMax:   'Duration Range',
 };
 
 // SSE still reports the legacy `{domain}-{object_id}` id, and object_id is the
@@ -43,10 +41,8 @@ const NAME = {
 const objectId = n => n.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
 const COVER_ID  = 'cover-'  + objectId(NAME.cover);
 const SWITCH_ID = 'switch-' + objectId(NAME.swap);
-const NUM_OPEN  = 'number-' + objectId(NAME.openTime);
-const NUM_CLOSE = 'number-' + objectId(NAME.closeTime);
-const NUM_NUDGE = 'number-' + objectId(NAME.nudgeStep);
-const NUM_DURMAX = 'number-' + objectId(NAME.durMax);
+const CAL_ID = 'text_sensor-' + objectId(NAME.calStatus);
+const matches = (id, legacy, domain, name) => id === legacy || id === domain + '/' + name;
 
 const path = (domain, name) => `/${domain}/${encodeURIComponent(name)}`;
 
@@ -167,39 +163,8 @@ document.body.innerHTML = `
         <span class="stt-label" data-i="reverse">Reverse buttons</span>
         <div class="toggle" id="reverseToggle"></div>
       </div>
-      <div class="stt-row">
-        <span class="stt-label" data-i="openTime">Open time</span>
-        <div class="stepper">
-          <button class="step-btn" data-step="open" data-delta="-0.5">−</button>
-          <span class="step-val" id="openTimeVal">— s</span>
-          <button class="step-btn" data-step="open" data-delta="0.5">+</button>
-        </div>
-      </div>
-      <div class="stt-row">
-        <span class="stt-label" data-i="closeTime">Close time</span>
-        <div class="stepper">
-          <button class="step-btn" data-step="close" data-delta="-0.5">−</button>
-          <span class="step-val" id="closeTimeVal">— s</span>
-          <button class="step-btn" data-step="close" data-delta="0.5">+</button>
-        </div>
-      </div>
-      <div class="stt-row">
-        <span class="stt-label" data-i="durMax">Duration range</span>
-        <div class="stepper">
-          <button class="step-btn" data-step="durmax" data-delta="-5">−</button>
-          <span class="step-val" id="durMaxVal">— s</span>
-          <button class="step-btn" data-step="durmax" data-delta="5">+</button>
-        </div>
-      </div>
-      <div class="nudge-hint" data-i="durMaxHint">Upper limit of the two sliders above. Changing it restarts the blind.</div>
-      <div class="stt-row">
-        <span class="stt-label" data-i="nudgeStep">Nudge step</span>
-        <div class="stepper">
-          <button class="step-btn" data-step="nudge" data-delta="-0.1">−</button>
-          <span class="step-val" id="nudgeStepVal">— s</span>
-          <button class="step-btn" data-step="nudge" data-delta="0.1">+</button>
-        </div>
-      </div>
+      <div class="cal-cap" data-i="calCap">TRAVEL CALIBRATION</div>
+      <p class="nudge-hint" id="calibrationStatus" role="status" aria-live="polite"></p>
       <div class="cal-cap" data-i="nudgeCap">MANUAL NUDGE</div>
       <div class="nudge-hint" data-i="nudgeHint">Moves the blind even at the ends. Hold to keep going.</div>
       <div class="cal-grid">
@@ -213,18 +178,18 @@ document.body.innerHTML = `
         </button>
       </div>
 
-      <div class="cal-cap" data-i="calCap">EDGE CALIBRATION</div>
       <div class="cal-grid">
         <button class="cal-btn" data-cal="open">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round"><polyline points="6 14 12 8 18 14"/></svg>
-          <span data-i="calTop">CAL top</span>
+          <span data-i="calTop">Mark top</span>
         </button>
         <button class="cal-btn" data-cal="close">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round"><polyline points="6 10 12 16 18 10"/></svg>
-          <span data-i="calBottom">CAL bottom</span>
+          <span data-i="calBottom">Mark bottom</span>
         </button>
       </div>
     </div>
+    <button class="cal-btn calibration-reset" id="btnCalReset" data-i="calReset">Start over</button>
     <button class="done-btn" id="btnDone" data-i="done">Done</button>
   </div>
 
@@ -234,23 +199,45 @@ document.body.innerHTML = `
 // ── i18n ─────────────────────────────────────────────────────────
 const DICT = {
   en: {
+    calReset:'Start over',
+    calResetAsk:'Clear the learned travel and start calibration again?',
+    cal: {
+      unknown:'Reading calibration status…', first:'Jog to either end and mark that position.',
+      bottom:'Jog to your desired bottom, then tap Mark bottom.',
+      top:'Jog to your desired top, then tap Mark top.',
+      retry:'That trip could not be measured. Return to the last marked end and mark it again.',
+      reference:'Position lost during power-off. Jog to either marked end and mark it again.',
+      ready:'Ready. Normal travel stops just inside the marked ends.',
+      storage_error:'Movement disabled: could not save the blind position.',
+    },
     morning:'Morning', day:'Day', night:'Night', half:'Half',
     position:'POSITION', settings:'Settings',
     reverse:'Reverse buttons', openTime:'Open time', closeTime:'Close time', sec:'s',
-    calCap:'EDGE CALIBRATION', calTop:'CAL top', calBottom:'CAL bottom', done:'Done',
+    calCap:'TRAVEL CALIBRATION', calTop:'Mark top', calBottom:'Mark bottom', done:'Done',
     nudgeCap:'MANUAL NUDGE', nudgeUp:'Nudge up', nudgeDn:'Nudge down', nudgeStep:'Nudge step',
-    nudgeHint:'Moves the blind even at the ends. Hold to keep going.',
+    nudgeHint:'Tap for a small step, or hold to move. Watch the blind as you jog.',
     durMax:'Duration range', durMaxHint:'Upper limit of the two sliders above. Changing it restarts the blind.',
     openCap:'OPEN', topSaved:'Top position saved', bottomSaved:'Bottom position saved', netError:'No response from device',
     st:{ opening:'opening', closing:'closing', adjusting:'adjusting', open:'open', closed:'closed', stopped:'stopped', connecting:'connecting' }
   },
   uk: {
+    calReset:'Почати заново',
+    calResetAsk:'Скинути калібрування та почати заново?',
+    cal: {
+      unknown:'Зчитування калібрування…', first:'Перемістіть штору до одного краю і позначте його.',
+      bottom:'Перемістіть штору вниз і позначте нижнє положення.',
+      top:'Перемістіть штору вгору і позначте верхнє положення.',
+      retry:'Не вдалося виміряти рух. Поверніться до останньої позначки та позначте її знову.',
+      reference:'Положення втрачено. Перемістіть штору до позначеного краю та позначте його знову.',
+      ready:'Готово. Штора зупиняється трохи раніше позначених меж.',
+      storage_error:'Рух заблоковано: не вдалося зберегти положення.',
+    },
     morning:'Ранок', day:'День', night:'Ніч', half:'Пів',
     position:'ПОЗИЦІЯ', settings:'Налаштування',
     reverse:'Реверс кнопок', openTime:'Час відкриття', closeTime:'Час закриття', sec:'с',
     calCap:'КАЛІБРУВАННЯ КРАЇВ', calTop:'CAL верх', calBottom:'CAL низ', done:'Готово',
     nudgeCap:'РУЧНЕ ПІДСУВАННЯ', nudgeUp:'Підняти', nudgeDn:'Опустити', nudgeStep:'Крок підсування',
-    nudgeHint:'Рухає штору навіть у крайніх положеннях. Утримуй, щоб їхати далі.',
+    nudgeHint:'Коротке натискання — крок, утримання — рух. Стежте за шторою.',
     durMax:'Діапазон часу', durMaxHint:'Верхня межа двох полів вище. Зміна перезавантажить штору.',
     openCap:'ВІДКРИТО', topSaved:'Верхню позицію збережено', bottomSaved:'Нижню позицію збережено', netError:'Пристрій не відповідає',
     st:{ opening:'відкривається', closing:'закривається', adjusting:'регулювання', open:'відкрито', closed:'закрито', stopped:'зупинено', connecting:'підключення' }
@@ -264,7 +251,8 @@ const THEMES = ['midnight', 'warm'];
 let pos = 50;
 let coverState = 'stopped';
 let isDragging = false;
-let openT = null, closeT = null, nudgeT = null, durMaxT = null;
+let calibration = 'unknown';
+let prompted = false;
 
 // ── DOM refs ──────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -294,7 +282,7 @@ function applyLang() {
     if (v) el.textContent = v;
   });
   $('posLabel').textContent = d().openCap;
-  refreshTimeLabels();
+  renderCalibration();
   refreshStateWord();
 }
 
@@ -311,14 +299,26 @@ function refreshStateWord() {
   $('stateWord').textContent = word;
 }
 
-function refreshTimeLabels() {
-  if (openT  !== null) $('openTimeVal').textContent  = openT.toFixed(1)  + ' ' + d().sec;
-  if (closeT !== null) $('closeTimeVal').textContent = closeT.toFixed(1) + ' ' + d().sec;
-  if (nudgeT !== null) $('nudgeStepVal').textContent = nudgeT.toFixed(1) + ' ' + d().sec;
-  if (durMaxT !== null) $('durMaxVal').textContent = durMaxT.toFixed(0) + ' ' + d().sec;
+function renderCalibration() {
+  $('calibrationStatus').textContent = d().cal[calibration] || d().cal.unknown;
+  const enabled = calibration === 'ready';
+  slider.disabled = !enabled;
+  handle.setAttribute('aria-disabled', String(!enabled));
+  app.querySelectorAll('[data-pos],[data-cmd="open"],[data-cmd="close"]').forEach(button => {
+    button.disabled = !enabled;
+  });
 }
 
-// ── Visual update ─────────────────────────────────────────────────
+function setCalibration(state) {
+  if (!(state in d().cal)) return;
+  calibration = state;
+  renderCalibration();
+  if (!prompted && state !== 'unknown') {
+    prompted = true;
+    if (state !== 'ready') openSettings();
+  }
+}
+
 function updateVisual(newPos) {
   pos = Math.max(0, Math.min(100, newPos));
   const pct = Math.round(pos);
@@ -356,13 +356,15 @@ async function api(url, method = 'GET', body = null) {
 
 const coverPath = path('cover', NAME.cover);
 
-const setCover = val => api(`${coverPath}/set`, 'POST', `position=${(val / 100).toFixed(3)}`);
+const setCover = val => calibration === 'ready' && api(`${coverPath}/set`, 'POST', `position=${(val / 100).toFixed(3)}`);
 
 async function sendCmd(cmd) {
+  if (cmd !== 'stop' && calibration !== 'ready') return;
   await api(`${coverPath}/${cmd}`, 'POST');
 }
 
 async function setPos(val) {
+  if (calibration !== 'ready') return;
   updateVisual(val);
   await setCover(val);
 }
@@ -373,64 +375,53 @@ async function toggleReverse() {
 }
 
 async function calPosition(which) {
+  await stopNudge(true);
   const name = which === 'open' ? NAME.calOpen : NAME.calClose;
-  await api(`${path('button', name)}/press`, 'POST');
-  showToast(which === 'open' ? d().topSaved : d().bottomSaved);
+  await api(path('button', name) + '/press', 'POST');
+  setTimeout(readCalibration, 600);
 }
 
-// Limits are not hardcoded here: ESPHome reports min/max/step for every number
-// in its SSE entity-info message, so the UI adopts whatever the firmware was
-// built with. Change duration_max in the yaml and this follows automatically.
-// The values below are only a fallback for the moment before the first event
-// arrives.
-const STEPPERS = {
-  open:  { get: () => openT,  set: v => openT  = v, el: 'openTimeVal',  name: () => NAME.openTime,  id: () => NUM_OPEN,  min: 1,   max: 45, fallback: 21  },
-  close: { get: () => closeT, set: v => closeT = v, el: 'closeTimeVal', name: () => NAME.closeTime, id: () => NUM_CLOSE, min: 1,   max: 45, fallback: 20  },
-  nudge: { get: () => nudgeT, set: v => nudgeT = v, el: 'nudgeStepVal', name: () => NAME.nudgeStep, id: () => NUM_NUDGE, min: 0.1, max: 5,  fallback: 0.5 },
-  durmax:{ get: () => durMaxT,set: v => durMaxT= v, el: 'durMaxVal',    name: () => NAME.durMax,    id: () => NUM_DURMAX,min: 20,  max: 120,fallback: 45  },
-};
-
-// Adopt the real limits announced by the device.
-function applyNumberLimits(data) {
-  const c = Object.values(STEPPERS).find(x => x.id() === data.id);
-  if (!c) return;
-  const min = parseFloat(data.min_value), max = parseFloat(data.max_value);
-  if (Number.isFinite(min)) c.min = min;
-  if (Number.isFinite(max)) c.max = max;
+async function resetCalibration() {
+  if (!window.confirm(d().calResetAsk)) return;
+  await stopNudge(true);
+  await api(path('button', NAME.calReset) + '/press', 'POST');
+  setTimeout(readCalibration, 600);
 }
 
-async function stepTime(which, delta) {
-  const c = STEPPERS[which];
-  if (!c) return;
-  const cur  = c.get();
-  const next = cur !== null ? Math.max(c.min, Math.min(c.max, +(cur + delta).toFixed(1))) : c.fallback;
-
-  c.set(next);
-  $(c.el).textContent = next.toFixed(which === 'durmax' ? 0 : 1) + ' ' + d().sec;
-
-  await api(`${path('number', c.name())}/set`, 'POST', `value=${next}`);
+async function readCalibration() {
+  const data = await api(path('text_sensor', NAME.calStatus));
+  if (data) setCalibration(data.value || data.state);
 }
 
-// ── Manual nudge ──────────────────────────────────────────────────
-// Each press fires the firmware's nudge script, which runs the motor for one
-// step. That script uses mode:restart, so repeating faster than the step keeps
-// the motor turning continuously — holding the button gives smooth travel that
-// stops one step after release.
-const NUDGE_REPEAT_MS = 250;
+// Keep at most one jog request in flight. A release waits for that request
+// before sending Stop; the controller also stops if the heartbeat goes away.
 let nudgeTimer = null;
-
-function nudgePress(dir) {
-  api(`${path('button', dir === 'up' ? NAME.nudgeUp : NAME.nudgeDn)}/press`, 'POST');
-}
+let nudgeFlight = null;
+let nudgeStarted = 0;
+let nudgeRelease = null;
 
 function startNudge(dir) {
-  stopNudge();
-  nudgePress(dir);
-  nudgeTimer = setInterval(() => nudgePress(dir), NUDGE_REPEAT_MS);
+  if (nudgeTimer !== null || nudgeRelease) return;
+  nudgeStarted = performance.now();
+  const pulse = () => {
+    if (nudgeFlight) return;
+    nudgeFlight = api(path('button', dir === 'up' ? NAME.nudgeUp : NAME.nudgeDn) + '/press', 'POST')
+      .finally(() => { nudgeFlight = null; });
+  };
+  pulse();
+  nudgeTimer = setInterval(pulse, 150);
 }
 
-function stopNudge() {
-  if (nudgeTimer !== null) { clearInterval(nudgeTimer); nudgeTimer = null; }
+async function stopNudge(force = false) {
+  if (nudgeRelease) return nudgeRelease;
+  if (nudgeTimer === null && !force) return;
+  const held = nudgeTimer !== null && performance.now() - nudgeStarted >= 180;
+  clearInterval(nudgeTimer);
+  nudgeTimer = null;
+  if (!held && !force) return; // a tap gets one bounded pulse
+  nudgeRelease = Promise.resolve(nudgeFlight).then(() => sendCmd('stop'))
+    .finally(() => { nudgeRelease = null; });
+  return nudgeRelease;
 }
 
 // ── SSE ───────────────────────────────────────────────────────────
@@ -440,19 +431,18 @@ function connectSSE() {
     try {
       const data = JSON.parse(e.data);
       setOnline(true);
-      if (data.max_value !== undefined) applyNumberLimits(data);
-      if (data.id === COVER_ID) {
-        coverState = data.state || coverState;
-        if (data.value != null && !isDragging) updateVisual(data.value * 100);
+      if (matches(data.id, COVER_ID, 'cover', NAME.cover)) {
+        coverState = String(data.current_operation || data.state || coverState).toLowerCase();
+        const current = data.position ?? data.value;
+        if (current != null && !isDragging) updateVisual(Number(current) * 100);
         else refreshStateWord();
       }
-      if (data.id === SWITCH_ID) {
+      if (matches(data.id, SWITCH_ID, 'switch', NAME.swap)) {
         $('reverseToggle').classList.toggle('on', !!data.value);
       }
-      if (data.id === NUM_OPEN)  { openT  = parseFloat(data.value); $('openTimeVal').textContent  = openT.toFixed(1)  + ' ' + d().sec; }
-      if (data.id === NUM_CLOSE) { closeT = parseFloat(data.value); $('closeTimeVal').textContent = closeT.toFixed(1) + ' ' + d().sec; }
-      if (data.id === NUM_NUDGE) { nudgeT = parseFloat(data.value); $('nudgeStepVal').textContent = nudgeT.toFixed(1) + ' ' + d().sec; }
-      if (data.id === NUM_DURMAX) { durMaxT = parseFloat(data.value); $('durMaxVal').textContent = durMaxT.toFixed(0) + ' ' + d().sec; }
+      if (matches(data.id, CAL_ID, 'text_sensor', NAME.calStatus)) {
+        setCalibration(data.value || data.state);
+      }
     } catch {}
   });
   // ESPHome sends its config JSON as the payload of the first `ping` event —
@@ -480,6 +470,7 @@ function setOnline(on) {
 
 // ── Drag handle ───────────────────────────────────────────────────
 handle.addEventListener('pointerdown', e => {
+  if (calibration !== 'ready') return;
   e.preventDefault();
   isDragging = true;
   handle.classList.add('dragging');
@@ -515,11 +506,15 @@ async function onDragUp() {
 // through the click delegation used by the rest of the UI.
 app.querySelectorAll('[data-nudge]').forEach(btn => {
   btn.addEventListener('pointerdown', e => { e.preventDefault(); startNudge(btn.dataset.nudge); });
-  ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => btn.addEventListener(ev, stopNudge));
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => btn.addEventListener(ev, () => stopNudge(ev !== 'pointerup')));
 });
 // A pointerup anywhere must stop it — releasing outside the button still ends
 // the gesture, and leaving the motor running would be dangerous.
-window.addEventListener('pointerup', stopNudge);
+window.addEventListener('pointerup', () => stopNudge());
+window.addEventListener('blur', () => { if (nudgeTimer !== null) stopNudge(true); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && nudgeTimer !== null) stopNudge(true);
+});
 
 // ── Slider ────────────────────────────────────────────────────────
 slider.addEventListener('input',  e => updateVisual(Number(e.target.value)));
@@ -527,12 +522,12 @@ slider.addEventListener('change', e => setCover(Number(e.target.value)));
 
 // ── Delegated click handlers ──────────────────────────────────────
 app.addEventListener('click', e => {
-  const t = e.target.closest('[data-pos],[data-cmd],[data-cal],[data-step],#reverseToggle,#btnDone');
+  const t = e.target.closest('[data-pos],[data-cmd],[data-cal],#btnCalReset,#reverseToggle,#btnDone');
   if (!t) return;
   if (t.dataset.pos  !== undefined) return void setPos(Number(t.dataset.pos));
   if (t.dataset.cmd  !== undefined) return void sendCmd(t.dataset.cmd);
   if (t.dataset.cal  !== undefined) return void calPosition(t.dataset.cal);
-  if (t.dataset.step !== undefined) return void stepTime(t.dataset.step, Number(t.dataset.delta));
+  if (t.id === 'btnCalReset')       return void resetCalibration();
   if (t.id === 'reverseToggle')     return void toggleReverse();
   if (t.id === 'btnDone')           return void closeSettings();
 });
@@ -552,7 +547,10 @@ $('btnLang').onclick = () => {
 
 // ── Settings ──────────────────────────────────────────────────────
 const openSettings  = () => $('settings').classList.add('open');
-const closeSettings = () => $('settings').classList.remove('open');
+const closeSettings = () => {
+  if (nudgeTimer !== null) stopNudge(true);
+  $('settings').classList.remove('open');
+};
 $('btnSettings').onclick      = openSettings;
 $('btnCloseSettings').onclick = closeSettings;
 
@@ -573,4 +571,6 @@ window.addEventListener('resize', () => updateVisual(pos));
 // The device name arrives with the first SSE `ping`, so there is nothing to
 // fetch up front — just draw and connect.
 updateVisual(pos);
+renderCalibration();
 connectSSE();
+readCalibration();

@@ -47,22 +47,15 @@ whenever a released file changes, don't add a zip to the tree.
 | GPIO20 | Button UP |
 | GPIO21 | Button DOWN |
 
-## Key features
-- time_based cover with position tracking, no encoders or limit switches
-- Physical buttons: short press = toggle to end, long press at position 0/1 = fine-tune calibration
-- Manual nudge (`Nudge Up` / `Nudge Down`) moves the motor even at reported 0%/100%, without touching calibration
-- Swap buttons toggle (if wired backwards)
-- Reverse motor toggle (if motor wired backwards)
-- Runtime "Duration Range" number resizes the Open/Close Duration sliders without reflashing
-- Master pattern: physical buttons fire `esphome.roller_master_*` events regardless of listeners; wiring them to other blinds is a Home Assistant automation (not included here — see README)
-- Built-in web UI, served from flash via `web_server: css_include/js_include` (entities are addressed by `name:`, not `id:` — see the warning in `roller-motor-dist.yaml`)
-- OTA firmware updates
-- On first boot, WiFi is set up from a phone via the device's own AP + captive portal — no fixed hostname until then
-
-## ESPHome events (fired unconditionally on physical button press)
-- esphome.roller_master_up
-- esphome.roller_master_down
-- esphome.roller_master_stop
+## Guided calibration
+- The portable motion model lives in firmware/roller_motion.h. ESPHome
+  applies its motor commands, persists calibration, and exposes the same
+  controller to the web UI and Home Assistant.
+- Two measured traversals learn both directions. Ordinary moves and jogs
+  obey guarded estimated endpoints after calibration.
+- Physical buttons move or stop after calibration; the original
+  Home Assistant event names are retained.
+- Test the host motion model and compile ESP32-C3 firmware before committing.
 
 ## Rules for Claude Code
 - NEVER commit a file containing a real API encryption key, OTA password, or WiFi credential

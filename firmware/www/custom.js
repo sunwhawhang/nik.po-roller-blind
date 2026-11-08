@@ -212,6 +212,10 @@ const DICT = {
       interrupted:'Power interrupted the move. Mark your current end to begin a new measurement.',
       reference:'Position lost during power-off. Jog to either marked end and mark it again.',
       ready:'Ready. To adjust an end, nudge to the new position and mark it again.',
+      ready_up:'Ready. For a long blind, we recommend measuring upward travel too. From the marked bottom, use Nudge to reach the top, then tap Mark top again.',
+      ready_down:'Ready. For a long blind, we recommend measuring downward travel too. From the marked top, use Nudge to reach the bottom, then tap Mark bottom again.',
+      ready_find_top:'Ready. For a long blind, we recommend measuring downward travel too. Go to the saved top and tap Mark top before jogging to the bottom.',
+      ready_find_bottom:'Ready. For a long blind, we recommend measuring upward travel too. Go to the saved bottom and tap Mark bottom before jogging to the top.',
       storage_error:'Movement disabled: could not save the blind position.',
     },
     morning:'Morning', day:'Day', night:'Night', half:'Half',
@@ -237,6 +241,10 @@ const DICT = {
       interrupted:'Живлення перервало рух. Позначте край, щоб почати вимірювання заново.',
       reference:'Положення втрачено. Перемістіть штору до позначеного краю та позначте його знову.',
       ready:'Готово. Щоб змінити межу, перемістіть штору й позначте її знову.',
+      ready_up:'Готово. Для довгої штори радимо також виміряти рух вгору. Від позначеного низу підніміть штору до верху й позначте його знову.',
+      ready_down:'Готово. Для довгої штори радимо також виміряти рух вниз. Від позначеного верху опустіть штору до низу й позначте його знову.',
+      ready_find_top:'Готово. Щоб виміряти рух вниз, спочатку перемістіть штору до збереженого верху й позначте його.',
+      ready_find_bottom:'Готово. Щоб виміряти рух вгору, спочатку перемістіть штору до збереженого низу й позначте його.',
       storage_error:'Рух заблоковано: не вдалося зберегти положення.',
     },
     morning:'Ранок', day:'День', night:'Ніч', half:'Пів',
@@ -259,6 +267,7 @@ let pos = 50;
 let coverState = 'stopped';
 let isDragging = false;
 let calibration = 'unknown';
+const calibrated = () => calibration === 'ready' || calibration.startsWith('ready_');
 
 // ── DOM refs ──────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -299,7 +308,7 @@ function refreshStateWord() {
   if (coverState === 'opening')      word = st.opening;
   else if (coverState === 'closing') word = st.closing;
   else if (calibration === 'unknown') word = st.connecting;
-  else if (calibration !== 'ready')   word = d().calLocked;
+  else if (!calibrated())            word = d().calLocked;
   else if (isDragging)               word = st.adjusting;
   else if (pct >= 99)                word = st.open;
   else if (pct <= 1)                 word = st.closed;
@@ -310,7 +319,7 @@ function refreshStateWord() {
 function renderCalibration() {
   $('calibrationStatus').textContent = d().cal[calibration] || d().cal.unknown;
   refreshStateWord();
-  const enabled = calibration === 'ready';
+  const enabled = calibrated();
   $('btnCloseSettings').disabled = !enabled;
   $('btnDone').disabled = !enabled;
   $('calibrationLockHint').hidden = enabled;
@@ -325,7 +334,7 @@ function setCalibration(state) {
   if (!(state in d().cal)) return;
   calibration = state;
   renderCalibration();
-  if (state !== 'ready' && state !== 'unknown') openSettings();
+  if (!calibrated() && state !== 'unknown') openSettings();
 }
 
 function updateVisual(newPos) {
@@ -365,15 +374,15 @@ async function api(url, method = 'GET', body = null) {
 
 const coverPath = path('cover', NAME.cover);
 
-const setCover = val => calibration === 'ready' && api(`${coverPath}/set`, 'POST', `position=${(val / 100).toFixed(3)}`);
+const setCover = val => calibrated() && api(`${coverPath}/set`, 'POST', `position=${(val / 100).toFixed(3)}`);
 
 async function sendCmd(cmd) {
-  if (cmd !== 'stop' && calibration !== 'ready') return;
+  if (cmd !== 'stop' && !calibrated()) return;
   await api(`${coverPath}/${cmd}`, 'POST');
 }
 
 async function setPos(val) {
-  if (calibration !== 'ready') return;
+  if (!calibrated()) return;
   updateVisual(val);
   await setCover(val);
 }
@@ -479,7 +488,7 @@ function setOnline(on) {
 
 // ── Drag handle ───────────────────────────────────────────────────
 handle.addEventListener('pointerdown', e => {
-  if (calibration !== 'ready') return;
+  if (!calibrated()) return;
   e.preventDefault();
   isDragging = true;
   handle.classList.add('dragging');
@@ -557,7 +566,7 @@ $('btnLang').onclick = () => {
 // ── Settings ──────────────────────────────────────────────────────
 const openSettings  = () => $('settings').classList.add('open');
 const closeSettings = () => {
-  if (calibration !== 'ready') return;
+  if (!calibrated()) return;
   if (nudgeTimer !== null) stopNudge(true);
   $('settings').classList.remove('open');
 };

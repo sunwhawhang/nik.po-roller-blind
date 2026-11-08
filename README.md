@@ -87,7 +87,9 @@ unlock after those two marks. Use Nudge and re-mark an end to adjust it
 without starting over. The other end remains the reference.
 
 A single trip measures motor drive in one direction and estimates the other.
-The estimated direction has a larger stopping margin. After power loss
+For longer blinds, Settings suggests an optional return to the first end.
+Jog back and mark it again to measure the other direction independently.
+The estimated direction has a larger stopping margin until then. After power loss
 during a move, mark a known physical endpoint to resume normal motion.
 
 The estimate can drift. Start with supervised moves, and use physical limit

@@ -604,8 +604,9 @@ it again. Take your time and read as you go.
   3. Jog to the safe bottom and tap "Mark bottom". The status now says
      Ready and Up/Down are enabled. No return trip or stopwatch is required.
   4. Try the normal controls while watching the blind. Normal movement
-     stops inside the marks. The reverse direction uses a larger margin
-     until calibrated travel is available for it.
+     stops inside the marks. For longer blinds, jog back to the first end
+     and mark it again to measure travel in both directions. The estimated
+     direction uses a larger stopping margin until it is measured.
 
   Before calibration, a physical button tap jogs one short step. Hold it
   to move farther, then release to stop. The web Nudge buttons also work.

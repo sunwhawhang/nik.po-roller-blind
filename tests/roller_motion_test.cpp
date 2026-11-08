@@ -63,7 +63,10 @@ void two_marks_and_endpoint_trim() {
   b.finish_move();
   assert(b.fabric > 0.93f && b.fabric < 1.0f); // opposite reference retained
 
-  // Adjust the top inward without restarting calibration.
+  // Complete the optional return at the intended top, then test a local trim.
+  b.jog_to(1);
+  b.motor.mark(Dir::up, b.now);
+  assert(std::string_view(b.motor.status()) == "ready");
   const float top_before = b.fabric;
   b.motor.jog(Dir::down, b.now);
   b.finish_move();
@@ -241,6 +244,53 @@ void reversed_buttons_and_nudges_calibrate_either_order() {
   assert(legacy.ready() && legacy.opens(Dir::up));
   legacy.go(1,100);
   assert(legacy.direction()==Dir::up);
+  Motion one_direction;
+  one_direction.restore({4,22000,22000,0.4f,5});
+  assert(one_direction.ready() && std::string_view(one_direction.status()) == "ready_find_bottom");
+  one_direction.mark(Dir::down,100);
+  assert(std::string_view(one_direction.status()) == "ready_up");
+}
+
+void optional_return_measures_both_directions() {
+  for (Dir first : {Dir::up, Dir::down}) {
+    Bench b;
+    const Dir second = Motion::reverse_if(first, true);
+    b.fabric = first == Dir::up ? 1.0f : 0.0f;
+    // The return is much slower and would hit the old manual trim limit.
+    b.up_ms = first == Dir::up ? 42000 : 22000;
+    b.down_ms = first == Dir::up ? 22000 : 42000;
+    b.motor.mark(first, b.now);
+    b.jog_to(1 - b.fabric);
+    b.motor.mark(second, b.now);
+    assert(b.motor.ready());
+    assert(std::string_view(b.motor.status()) == (first == Dir::up ? "ready_up" : "ready_down"));
+    assert(std::fabs(b.motor.opening_seconds() - 22.0f) < 0.1f);
+    assert(std::fabs(b.motor.closing_seconds() - 22.0f) < 0.1f);
+
+    // Both marks and the current marked end survive an idle reboot.
+    Motion restored;
+    restored.restore(b.motor.snapshot(true));
+    b.motor = restored;
+    b.motor.go(first == Dir::up ? 1 : 0, b.now);
+    assert(b.motor.active()); // a return mark is optional
+    b.finish_move();
+    assert(std::fabs(b.fabric - (first == Dir::up ? 1 : 0)) > 0.4f);
+    // Backtrack a little before reaching the physical endpoint.
+    b.jog_to(b.fabric + (first == Dir::up ? -0.06f : 0.06f));
+    b.jog_to(first == Dir::up ? 1 : 0);
+    b.motor.mark(first, b.now);
+    assert(std::string_view(b.motor.status()) == "ready");
+    const float measured_return = first == Dir::up ? b.motor.opening_seconds() : b.motor.closing_seconds();
+    const float original_direction = first == Dir::up ? b.motor.closing_seconds() : b.motor.opening_seconds();
+    assert(std::fabs(measured_return - 42.0f) < 0.2f);
+    assert(std::fabs(original_direction - 22.0f) < 0.1f);
+    b.motor.go(second == Dir::up ? 1 : 0, b.now);
+    b.finish_move();
+    assert(std::fabs(b.fabric - (second == Dir::up ? 1 : 0)) < 0.02f);
+    b.motor.go(first == Dir::up ? 1 : 0, b.now);
+    b.finish_move();
+    assert(std::fabs(b.fabric - (first == Dir::up ? 1 : 0)) < 0.02f);
+  }
 }
 
 int main() {
@@ -250,5 +300,6 @@ int main() {
   physical_buttons_before_calibration();
   calibration_orders_survive_idle_restart();
   reversed_buttons_and_nudges_calibrate_either_order();
+  optional_return_measures_both_directions();
   std::puts("Passed: two marks, endpoint trimming, guarded partial moves, saved calibration, jog timeout, reversal physical controls, both mark orders interrupted calibration, reversed jog calibration and legacy direction preservation.");
 }

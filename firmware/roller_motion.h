@@ -43,7 +43,11 @@ class Motion {
   float closing_seconds() const { return closing_ / 1000.0f; }
   const char *status() const {
     if (failed_) return "storage_error";
-    if (ready()) return "ready";
+    if (ready()) {
+      if (learned_ == 1) return needs_return_measurement(Dir::down) ? "ready_down" : "ready_find_top";
+      if (learned_ == 2) return needs_return_measurement(Dir::up) ? "ready_up" : "ready_find_bottom";
+      return "ready";
+    }
     if (profile()) return "reference";
     if (interrupted_) return "interrupted";
     if (invalid_) return "retry";
@@ -59,8 +63,10 @@ class Motion {
                              (invalid_ ? 2u : 0u) | (stopped ? 1u : 0u);
       return {3, leg_.up, leg_.down, anchor_ == Dir::up ? 1.0f : 0.0f, flags};
     }
+    const bool at_mark = stopped && ready() && anchor_ != Dir::off &&
+                         leg_.up == 0 && leg_.down == 0;
     const uint32_t flags = (learned_ << 1) | (axis_reversed_ ? 8u : 0u) |
-                           static_cast<uint32_t>(stopped && ready());
+                           (at_mark ? 16u : 0u) | static_cast<uint32_t>(stopped && ready());
     return {4, opening_, closing_, physical_, flags};
   }
   void restore(const Snapshot &s) {
@@ -91,6 +97,10 @@ class Motion {
     learned_ = learned;
     axis_reversed_ = s.version == 4 && (s.known & 8u);
     known_ = (s.known & 1) != 0;
+    if (known_ && s.version == 4 && (s.known & 16u)) {
+      if (s.position == 1.0f) anchor_ = Dir::up;
+      if (s.position == 0.0f) anchor_ = Dir::down;
+    }
   }
 
   bool take_save() {
@@ -105,12 +115,12 @@ class Motion {
     last_ = now;
     if (duty_ > 0) {
       const float travel = elapsed * duty_;
+      if (anchor_ != Dir::off) (direction_ == Dir::up ? leg_.up : leg_.down) += travel;
       if (ready()) {
         physical_ = std::clamp(physical_ + (opens(direction_) ? travel / opening_
                                                                 : -travel / closing_),
                                -kTrim, 1.0f + kTrim);
-      } else if (!ready()) {
-        if (anchor_ != Dir::off && !profile()) (direction_ == Dir::up ? leg_.up : leg_.down) += travel;
+      } else {
         leg_motor_ms_ += elapsed;
       }
     }
@@ -221,7 +231,16 @@ class Motion {
     interrupted_ = false;
     const float position = edge == Dir::up ? 1.0f : 0.0f;
     if (profile()) {
-      if (known_) {
+      if (known_ && needs_return_measurement(edge)) {
+        const float forward = travel_toward(edge);
+        const Dir opposite = reverse_if(edge, true);
+        const float other_span = edge == Dir::up ? closing_ : opening_;
+        // Convert any backtracking using the already measured direction.
+        const float span = forward / (1 + travel_toward(opposite) / other_span);
+        if (!valid_span(span)) return;
+        (edge == Dir::up ? opening_ : closing_) = span;
+        learned_ |= edge == Dir::up ? 1u : 2u;
+      } else if (known_) {
         // The new mark moves this end of the span; preserve the opposite mark.
         // Use the raw estimate, including any manual jog beyond the old mark.
         const float scale = edge == Dir::up ? physical_ : 1.0f - physical_;
@@ -230,6 +249,8 @@ class Motion {
         closing_ *= scale;
       }
       physical_ = position;
+      anchor_ = edge;
+      leg_ = {};
       known_ = true;
       save_ = true;
       return;
@@ -269,7 +290,19 @@ class Motion {
   }
   float low() const { return profile() ? margin(closing_, learned_ & 2) : 0; }
   float high() const { return profile() ? 1 - margin(opening_, learned_ & 1) : 1; }
-  bool trim_exhausted(Dir dir) const { return opens(dir) ? physical_ >= 1 + kTrim : physical_ <= -kTrim; }
+  bool needs_return_measurement(Dir edge) const {
+    return anchor_ == reverse_if(edge, true) && !(learned_ & (edge == Dir::up ? 1u : 2u));
+  }
+  float travel_toward(Dir edge) const {
+    return reverse_if(edge, axis_reversed_) == Dir::up ? leg_.up : leg_.down;
+  }
+  bool trim_exhausted(Dir dir) const {
+    const Dir edge = opens(dir) ? Dir::up : Dir::down;
+    // A supervised return may be longer than the unmeasured estimate.
+    // Keep the heartbeat and run limits, and bound repeated jogs too.
+    if (needs_return_measurement(edge)) return travel_toward(edge) >= kRunMaxMs;
+    return edge == Dir::up ? physical_ >= 1 + kTrim : physical_ <= -kTrim;
+  }
   bool reached() const { return opens(direction_) ? physical_ >= target_ : physical_ <= target_; }
   void end() { direction_ = Dir::off; duty_ = 0; }
   void begin(Dir dir, uint32_t now) {

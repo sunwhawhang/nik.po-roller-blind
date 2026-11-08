@@ -165,6 +165,7 @@ document.body.innerHTML = `
       </div>
       <div class="cal-cap" data-i="calCap">TRAVEL CALIBRATION</div>
       <p class="nudge-hint" id="calibrationStatus" role="status" aria-live="polite"></p>
+      <p class="nudge-hint" id="calibrationLockHint" data-i="calGate">Mark both ends to unlock Up/Down and close Settings.</p>
       <div class="cal-cap" data-i="nudgeCap">MANUAL NUDGE</div>
       <div class="nudge-hint" data-i="nudgeHint">Moves the blind even at the ends. Hold to keep going.</div>
       <div class="cal-grid">
@@ -200,12 +201,13 @@ document.body.innerHTML = `
 const DICT = {
   en: {
     calLocked:'Mark both ends to unlock Up/Down',
+    calGate:'Mark both ends to unlock Up/Down and close Settings.',
     calReset:'Start over',
     calResetAsk:'Clear the learned travel and start calibration again?',
     cal: {
       unknown:'Reading calibration status…', first:'Use the physical buttons or Nudge to reach either end and mark it. Move to the other end and mark it to enable full travel.',
-      bottom:'Move to your bottom and tap Mark bottom to finish.',
-      top:'Move to your top and tap Mark top to finish.',
+      bottom:'Top saved. Move to the bottom and mark it to finish.',
+      top:'Bottom saved. Move to the top and mark it to finish.',
       retry:'Not enough travel was recorded in that direction. Mark one end, then move to and mark the other.',
       interrupted:'Power interrupted the move. Mark your current end to begin a new measurement.',
       reference:'Position lost during power-off. Jog to either marked end and mark it again.',
@@ -224,6 +226,7 @@ const DICT = {
   },
   uk: {
     calLocked:'Позначте обидві межі, щоб увімкнути рух',
+    calGate:'Позначте обидві межі, щоб увімкнути рух і закрити налаштування.',
     calReset:'Почати заново',
     calResetAsk:'Скинути калібрування та почати заново?',
     cal: {
@@ -256,7 +259,6 @@ let pos = 50;
 let coverState = 'stopped';
 let isDragging = false;
 let calibration = 'unknown';
-let prompted = false;
 
 // ── DOM refs ──────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -309,6 +311,9 @@ function renderCalibration() {
   $('calibrationStatus').textContent = d().cal[calibration] || d().cal.unknown;
   refreshStateWord();
   const enabled = calibration === 'ready';
+  $('btnCloseSettings').disabled = !enabled;
+  $('btnDone').disabled = !enabled;
+  $('calibrationLockHint').hidden = enabled;
   slider.disabled = !enabled;
   handle.setAttribute('aria-disabled', String(!enabled));
   app.querySelectorAll('[data-pos],[data-cmd="open"],[data-cmd="close"]').forEach(button => {
@@ -320,10 +325,7 @@ function setCalibration(state) {
   if (!(state in d().cal)) return;
   calibration = state;
   renderCalibration();
-  if (!prompted && state !== 'unknown') {
-    prompted = true;
-    if (state !== 'ready') openSettings();
-  }
+  if (state !== 'ready' && state !== 'unknown') openSettings();
 }
 
 function updateVisual(newPos) {
@@ -555,6 +557,7 @@ $('btnLang').onclick = () => {
 // ── Settings ──────────────────────────────────────────────────────
 const openSettings  = () => $('settings').classList.add('open');
 const closeSettings = () => {
+  if (calibration !== 'ready') return;
   if (nudgeTimer !== null) stopNudge(true);
   $('settings').classList.remove('open');
 };

@@ -160,7 +160,7 @@ document.body.innerHTML = `
     </div>
     <div class="stt-body">
       <div class="stt-row">
-        <span class="stt-label" data-i="reverse">Reverse buttons</span>
+        <span class="stt-label" data-i="reverse">Reverse buttons and nudges</span>
         <div class="toggle" id="reverseToggle"></div>
       </div>
       <div class="cal-cap" data-i="calCap">TRAVEL CALIBRATION</div>
@@ -216,7 +216,7 @@ const DICT = {
     },
     morning:'Morning', day:'Day', night:'Night', half:'Half',
     position:'POSITION', settings:'Settings',
-    reverse:'Reverse buttons', openTime:'Open time', closeTime:'Close time', sec:'s',
+    reverse:'Reverse buttons and nudges', openTime:'Open time', closeTime:'Close time', sec:'s',
     calCap:'TRAVEL CALIBRATION', calTop:'Mark top', calBottom:'Mark bottom', done:'Done',
     nudgeCap:'MANUAL NUDGE', nudgeUp:'Nudge up', nudgeDn:'Nudge down', nudgeStep:'Nudge step',
     nudgeHint:'Tap for a small step, or hold to move. Watch the blind as you jog.',

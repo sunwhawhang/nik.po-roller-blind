@@ -11,8 +11,9 @@ struct Bench {
   uint32_t now{0};
   float fabric{1};
   float up_ms = 22000, down_ms = 22000;
+  bool reversed_wiring{};
   void step(unsigned ms = 10) {
-    const auto d = motor.direction();
+    const auto d = Motion::reverse_if(motor.direction(), reversed_wiring);
     if (d == Dir::up) fabric += motor.duty() * ms / up_ms;
     if (d == Dir::down) fabric -= motor.duty() * ms / down_ms;
     now += ms;
@@ -204,11 +205,50 @@ void calibration_orders_survive_idle_restart() {
   }
 }
 
+void reversed_buttons_and_nudges_calibrate_either_order() {
+  for (Dir first : {Dir::up, Dir::down}) {
+    const Dir second = first == Dir::up ? Dir::down : Dir::up;
+    Bench b;
+    b.reversed_wiring = true;
+    b.fabric = first == Dir::up ? 1.0f : 0.0f;
+    b.motor.mark(first,b.now);
+    const Dir same_as_button = Motion::reverse_if(second,true);
+    b.motor.press_physical(second,true,false,b.now);
+    assert(b.motor.direction() == same_as_button);
+    b.motor.stop(b.now);
+    for (int n=0; n<5000; ++n) {
+      if (second == Dir::up ? b.fabric >= 1 : b.fabric <= 0) break;
+      if (n % 15 == 0) b.motor.jog(same_as_button,b.now);
+      b.step();
+    }
+    b.motor.stop(b.now);
+    assert(std::fabs(b.fabric-(second == Dir::up ? 1 : 0)) < 0.002f);
+    b.motor.mark(second,b.now);
+    assert(b.motor.ready());
+    assert(b.motor.opens(Dir::down) && !b.motor.opens(Dir::up));
+    Motion restored;
+    restored.restore(b.motor.snapshot(true));
+    assert(restored.ready() && restored.opens(Dir::down));
+    b.motor = restored;
+    b.motor.go(first == Dir::up ? 1 : 0,b.now);
+    assert(b.motor.direction() == Motion::reverse_if(first,true));
+    b.finish_move();
+    assert(first == Dir::up ? b.fabric > 0.93f && b.fabric < 1.0f :
+                              b.fabric < 0.07f && b.fabric > 0.0f);
+  }
+  Motion legacy;
+  legacy.restore({2,19000,24000,0.5f,7});
+  assert(legacy.ready() && legacy.opens(Dir::up));
+  legacy.go(1,100);
+  assert(legacy.direction()==Dir::up);
+}
+
 int main() {
   two_marks_and_endpoint_trim();
   retains_existing_calibration();
   bounded_jog_and_interlock();
   physical_buttons_before_calibration();
   calibration_orders_survive_idle_restart();
-  std::puts("Passed: two marks, endpoint trimming, guarded partial moves, saved calibration, jog timeout, reversal physical controls, both mark orders and interrupted calibration.");
+  reversed_buttons_and_nudges_calibrate_either_order();
+  std::puts("Passed: two marks, endpoint trimming, guarded partial moves, saved calibration, jog timeout, reversal physical controls, both mark orders interrupted calibration, reversed jog calibration and legacy direction preservation.");
 }

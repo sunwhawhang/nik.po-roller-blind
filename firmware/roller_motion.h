@@ -28,6 +28,12 @@ class Motion {
   bool active() const { return direction_ != Dir::off; }
   bool has_reference() const { return ready() || anchor_ != Dir::off; }
   Dir direction() const { return direction_; }
+  static Dir reverse_if(Dir dir, bool reverse) {
+    return !reverse || dir == Dir::off ? dir : dir == Dir::up ? Dir::down : Dir::up;
+  }
+  bool opens(Dir motor_direction) const {
+    return reverse_if(motor_direction, axis_reversed_) == Dir::up;
+  }
   float duty() const { return duty_; }
   float position() const {
     return ready() ? std::clamp((physical_ - low()) / (high() - low()), 0.0f, 1.0f)
@@ -53,8 +59,9 @@ class Motion {
                              (invalid_ ? 2u : 0u) | (stopped ? 1u : 0u);
       return {3, leg_.up, leg_.down, anchor_ == Dir::up ? 1.0f : 0.0f, flags};
     }
-    const uint32_t flags = (learned_ << 1) | static_cast<uint32_t>(stopped && ready());
-    return {2, opening_, closing_, physical_, flags};
+    const uint32_t flags = (learned_ << 1) | (axis_reversed_ ? 8u : 0u) |
+                           static_cast<uint32_t>(stopped && ready());
+    return {4, opening_, closing_, physical_, flags};
   }
   void restore(const Snapshot &s) {
     if (s.version == 3) {
@@ -74,14 +81,15 @@ class Motion {
       invalid_ = (s.known & 2u) != 0;
       return;
     }
-    if ((s.version != 1 && s.version != 2) || !valid_span(s.opening) || !valid_span(s.closing) ||
+    if ((s.version != 1 && s.version != 2 && s.version != 4) || !valid_span(s.opening) || !valid_span(s.closing) ||
         !std::isfinite(s.position) || s.position < -kTrim || s.position > 1 + kTrim) return;
-    const uint32_t learned = s.version == 1 ? 3 : s.known >> 1;
+    const uint32_t learned = s.version == 1 ? 3 : (s.known >> 1) & 3u;
     if (learned == 0 || learned > 3) return;
     opening_ = s.opening;
     closing_ = s.closing;
     physical_ = s.position;
     learned_ = learned;
+    axis_reversed_ = s.version == 4 && (s.known & 8u);
     known_ = (s.known & 1) != 0;
   }
 
@@ -98,7 +106,7 @@ class Motion {
     if (duty_ > 0) {
       const float travel = elapsed * duty_;
       if (ready()) {
-        physical_ = std::clamp(physical_ + (direction_ == Dir::up ? travel / opening_
+        physical_ = std::clamp(physical_ + (opens(direction_) ? travel / opening_
                                                                 : -travel / closing_),
                                -kTrim, 1.0f + kTrim);
       } else if (!ready()) {
@@ -128,8 +136,8 @@ class Motion {
       end();
       return;
     }
-    const Dir dir = target > physical_ ? Dir::up : Dir::down;
-    begin(dir, now);
+    const Dir logical_direction = target > physical_ ? Dir::up : Dir::down;
+    begin(reverse_if(logical_direction, axis_reversed_), now);
     target_mode_ = true;
     target_ = target;
   }
@@ -148,7 +156,7 @@ class Motion {
       return;
     }
     physical_button_ = button;
-    physical_direction_ = swapped ? (button == Dir::up ? Dir::down : Dir::up) : button;
+    physical_direction_ = reverse_if(button, swapped);
     physical_pressed_at_ = now;
     jog_pulse(physical_direction_, now);
   }
@@ -194,6 +202,7 @@ class Motion {
     opening_ = closing_ = 0;
     anchor_ = Dir::off;
     learned_ = 0;
+    axis_reversed_ = false;
     leg_ = {};
     leg_motor_ms_ = 0;
     invalid_ = interrupted_ = false;
@@ -227,7 +236,8 @@ class Motion {
     }
     invalid_ = false;
     if (anchor_ != Dir::off && edge != anchor_) {
-      const float span = edge == Dir::up ? leg_.up - leg_.down : leg_.down - leg_.up;
+      const float signed_span = edge == Dir::up ? leg_.up - leg_.down : leg_.down - leg_.up;
+      const float span = std::fabs(signed_span);
       if (leg_motor_ms_ >= kRunMaxMs || !valid_span(span)) {
         invalid_ = true;
         save_ = true;
@@ -236,6 +246,9 @@ class Motion {
       // One trip provides a span and measures one direction. Use the same
       // estimated span in the other direction, with a larger stopping margin.
       opening_ = closing_ = span;
+      // The two physical marks also identify which motor polarity opens.
+      // This keeps a reversed jog from being mistaken for missing travel.
+      axis_reversed_ = signed_span < 0;
       learned_ = edge == Dir::up ? 1 : 2;
       known_ = true;
       save_ = true;
@@ -256,8 +269,8 @@ class Motion {
   }
   float low() const { return profile() ? margin(closing_, learned_ & 2) : 0; }
   float high() const { return profile() ? 1 - margin(opening_, learned_ & 1) : 1; }
-  bool trim_exhausted(Dir dir) const { return dir == Dir::up ? physical_ >= 1 + kTrim : physical_ <= -kTrim; }
-  bool reached() const { return direction_ == Dir::up ? physical_ >= target_ : physical_ <= target_; }
+  bool trim_exhausted(Dir dir) const { return opens(dir) ? physical_ >= 1 + kTrim : physical_ <= -kTrim; }
+  bool reached() const { return opens(direction_) ? physical_ >= target_ : physical_ <= target_; }
   void end() { direction_ = Dir::off; duty_ = 0; }
   void begin(Dir dir, uint32_t now) {
     if (direction_ == dir) return;
@@ -269,7 +282,7 @@ class Motion {
   Dir direction_{Dir::off}, anchor_{Dir::off};
   Dir physical_button_{Dir::off}, physical_direction_{Dir::off};
   uint32_t physical_pressed_at_{};
-  bool known_{}, target_mode_{}, invalid_{}, interrupted_{}, save_{}, failed_{};
+  bool known_{}, target_mode_{}, invalid_{}, interrupted_{}, axis_reversed_{}, save_{}, failed_{};
   uint32_t started_{}, last_{}, last_jog_{}, leg_motor_ms_{};
   float opening_{}, closing_{}, physical_{0.5f}, target_{}, duty_{};
   uint32_t learned_{};

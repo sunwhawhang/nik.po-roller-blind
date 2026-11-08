@@ -64,9 +64,10 @@ esphome:
           id(motion_active) = m.active();
           if (transitioned || needs_save || now - id(motion_published) >= 200) {
             id(motion_published) = now;
-            const auto op = m.direction() == roller::Dir::up ? COVER_OPERATION_OPENING :
-                            m.direction() == roller::Dir::down ? COVER_OPERATION_CLOSING :
-                            COVER_OPERATION_IDLE;
+            const bool opening = m.profile() ? m.opens(m.direction()) :
+                roller::Motion::reverse_if(m.direction(), id(swap_buttons)) == roller::Dir::up;
+            const auto op = !m.active() ? COVER_OPERATION_IDLE :
+                            opening ? COVER_OPERATION_OPENING : COVER_OPERATION_CLOSING;
             if (id(blind).position != m.position() || id(blind).current_operation != op) {
               id(blind).position = m.position();
               id(blind).current_operation = op;
@@ -208,7 +209,10 @@ script:
                 else:
                   - if:
                       condition:
-                        lambda: 'return raw_up != id(swap_buttons);'
+                        lambda: |-
+                          const auto dir = roller::Motion::reverse_if(
+                              raw_up ? roller::Dir::up : roller::Dir::down, id(swap_buttons));
+                          return roller::controller().opens(dir);
                       then:
                         - cover.open: blind
                         - homeassistant.event:
@@ -282,12 +286,16 @@ button:
     name: Nudge Up
     icon: mdi:arrow-up
     on_press:
-      - lambda: 'roller::controller().jog(roller::Dir::up, millis());'
+      - lambda: |-
+          roller::controller().jog(
+              roller::Motion::reverse_if(roller::Dir::up, id(swap_buttons)), millis());
   - platform: template
     name: Nudge Down
     icon: mdi:arrow-down
     on_press:
-      - lambda: 'roller::controller().jog(roller::Dir::down, millis());'
+      - lambda: |-
+          roller::controller().jog(
+              roller::Motion::reverse_if(roller::Dir::down, id(swap_buttons)), millis());
   - platform: template
     name: Calibrate Closed
     icon: mdi:arrow-collapse-down

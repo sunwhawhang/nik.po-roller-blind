@@ -723,11 +723,11 @@ it again. Take your time and read as you go.
 
   BLIND MOVES THE WRONG WAY
     The ESPHome "Reverse Motor" switch changes the motor direction and
-    clears calibration. The web "Reverse buttons" toggle only swaps the
-    two physical button assignments.
+    clears calibration. The web "Reverse buttons and nudges" toggle swaps both the
+    physical buttons and the Settings Nudge arrows.
 
   BUTTONS DO THE OPPOSITE OF WHAT THEY SHOULD
-    Open Settings and turn on "Reverse Buttons".
+    Open Settings and turn on "Reverse buttons and nudges".
 
   BLIND SAYS 100% (OR 0%) BUT STOPS JUST INSIDE THE MARK
     A small margin is intentional. If it consistently stops much too far

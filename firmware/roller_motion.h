@@ -26,6 +26,7 @@ class Motion {
   bool ready() const { return profile() && known_; }
   bool profile() const { return opening_ > 0 && closing_ > 0; }
   bool active() const { return direction_ != Dir::off; }
+  bool has_reference() const { return ready() || anchor_ != Dir::off; }
   Dir direction() const { return direction_; }
   float duty() const { return duty_; }
   float position() const {
@@ -38,16 +39,41 @@ class Motion {
     if (failed_) return "storage_error";
     if (ready()) return "ready";
     if (profile()) return "reference";
+    if (interrupted_) return "interrupted";
     if (invalid_) return "retry";
     if (anchor_ == Dir::off) return "first";
     return anchor_ == Dir::up ? "bottom" : "top";
   }
 
   Snapshot snapshot(bool stopped) const {
+    if (!profile() && anchor_ != Dir::off) {
+      // Keep the existing preference key/size. Version 3 stores an unfinished
+      // leg; versions 1 and 2 still store a complete calibration profile.
+      const uint32_t flags = (std::min(leg_motor_ms_, kRunMaxMs) << 2) |
+                             (invalid_ ? 2u : 0u) | (stopped ? 1u : 0u);
+      return {3, leg_.up, leg_.down, anchor_ == Dir::up ? 1.0f : 0.0f, flags};
+    }
     const uint32_t flags = (learned_ << 1) | static_cast<uint32_t>(stopped && ready());
     return {2, opening_, closing_, physical_, flags};
   }
   void restore(const Snapshot &s) {
+    if (s.version == 3) {
+      if (!(s.known & 1u)) {
+        // Do not guess travel lost in the middle of a power interruption.
+        interrupted_ = true;
+        return;
+      }
+      if ((s.position != 0.0f && s.position != 1.0f) ||
+          !std::isfinite(s.opening) || !std::isfinite(s.closing) ||
+          s.opening < 0 || s.closing < 0 || s.opening > kRunMaxMs ||
+          s.closing > kRunMaxMs || (s.known >> 2) > kRunMaxMs) return;
+      anchor_ = s.position == 1.0f ? Dir::up : Dir::down;
+      physical_ = s.position;
+      leg_ = {s.opening, s.closing};
+      leg_motor_ms_ = s.known >> 2;
+      invalid_ = (s.known & 2u) != 0;
+      return;
+    }
     if ((s.version != 1 && s.version != 2) || !valid_span(s.opening) || !valid_span(s.closing) ||
         !std::isfinite(s.position) || s.position < -kTrim || s.position > 1 + kTrim) return;
     const uint32_t learned = s.version == 1 ? 3 : s.known >> 1;
@@ -170,7 +196,7 @@ class Motion {
     learned_ = 0;
     leg_ = {};
     leg_motor_ms_ = 0;
-    invalid_ = false;
+    invalid_ = interrupted_ = false;
     save_ = true;
   }
 
@@ -183,6 +209,7 @@ class Motion {
   void mark(Dir edge, uint32_t now) {
     stop(now);
     if (failed_ || edge == Dir::off) return;
+    interrupted_ = false;
     const float position = edge == Dir::up ? 1.0f : 0.0f;
     if (profile()) {
       if (known_) {
@@ -203,6 +230,7 @@ class Motion {
       const float span = edge == Dir::up ? leg_.up - leg_.down : leg_.down - leg_.up;
       if (leg_motor_ms_ >= kRunMaxMs || !valid_span(span)) {
         invalid_ = true;
+        save_ = true;
         return;
       }
       // One trip provides a span and measures one direction. Use the same
@@ -216,6 +244,7 @@ class Motion {
     anchor_ = edge;
     leg_ = {};
     leg_motor_ms_ = 0;
+    save_ = true;
   }
 
  private:
@@ -240,7 +269,7 @@ class Motion {
   Dir direction_{Dir::off}, anchor_{Dir::off};
   Dir physical_button_{Dir::off}, physical_direction_{Dir::off};
   uint32_t physical_pressed_at_{};
-  bool known_{}, target_mode_{}, invalid_{}, save_{}, failed_{};
+  bool known_{}, target_mode_{}, invalid_{}, interrupted_{}, save_{}, failed_{};
   uint32_t started_{}, last_{}, last_jog_{}, leg_motor_ms_{};
   float opening_{}, closing_{}, physical_{0.5f}, target_{}, duty_{};
   uint32_t learned_{};

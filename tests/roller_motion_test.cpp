@@ -165,10 +165,50 @@ void physical_buttons_before_calibration() {
   assert(!b.motor.active());
 }
 
+void calibration_orders_survive_idle_restart() {
+  for (Dir first : {Dir::up, Dir::down}) {
+    Bench b;
+    const Dir second = first == Dir::up ? Dir::down : Dir::up;
+    b.fabric = first == Dir::up ? 1.0f : 0.0f;
+    b.motor.mark(first, b.now);
+    assert(b.motor.has_reference() && b.motor.take_save());
+    const auto first_mark = b.motor.snapshot(true);
+    Motion restarted;
+    restarted.restore(first_mark);
+    assert(std::string_view(restarted.status()) == (second == Dir::up ? "top" : "bottom"));
+    b.motor = restarted;
+    b.motor.press_physical(second, false, false, b.now);
+    for (int i = 0; i < 5000; ++i) {
+      b.step();
+      b.motor.poll_physical(second == Dir::up, second == Dir::down, b.now);
+      if (second == Dir::up ? b.fabric >= 1.0f : b.fabric <= 0.0f) break;
+    }
+    b.motor.poll_physical(false, false, b.now);
+    assert(!b.motor.active() && std::fabs(b.fabric - (second == Dir::up ? 1 : 0)) < 0.002);
+    const auto arrived = b.motor.snapshot(true);
+    Motion after_trip_restart;
+    after_trip_restart.restore(arrived);
+    after_trip_restart.mark(second, b.now);
+    assert(after_trip_restart.ready()); // both directions finish on mark number two
+    assert(std::fabs(after_trip_restart.opening_seconds() - 22.0f) < 0.07);
+
+    Motion interrupted;
+    interrupted.restore(first_mark);
+    interrupted.press_physical(second, false, false, b.now);
+    Motion powered_back_on;
+    powered_back_on.restore(interrupted.snapshot(false));
+    assert(std::string_view(powered_back_on.status()) == "interrupted");
+    assert(!powered_back_on.ready() && !powered_back_on.active());
+    powered_back_on.mark(second, b.now);
+    assert(std::string_view(powered_back_on.status()) == (first == Dir::up ? "top" : "bottom"));
+  }
+}
+
 int main() {
   two_marks_and_endpoint_trim();
   retains_existing_calibration();
   bounded_jog_and_interlock();
   physical_buttons_before_calibration();
-  std::puts("Passed: two marks, endpoint trimming, guarded partial moves, saved calibration, jog timeout, reversal and pre-calibration physical controls.");
+  calibration_orders_survive_idle_restart();
+  std::puts("Passed: two marks, endpoint trimming, guarded partial moves, saved calibration, jog timeout, reversal physical controls, both mark orders and interrupted calibration.");
 }

@@ -31,7 +31,7 @@ esphome:
           m.tick(now);
           m.poll_physical(id(physical_up).state, id(physical_down).state, now);
           const bool was_active = id(motion_active);
-          if (m.active() && !was_active && m.ready()) {
+          if (m.active() && !was_active && m.has_reference()) {
             // Mark the reference unknown on disk before applying any PWM.
             // An unexpected reset during a move then requires re-referencing.
             auto saved = m.snapshot(false);
@@ -56,8 +56,8 @@ esphome:
             id(applied_pwm) = pwm;
           }
           const bool needs_save = m.take_save();
-          if (needs_save || (was_active && !m.active() && m.ready())) {
-            auto saved = m.snapshot(true);
+          if (needs_save || (was_active && !m.active() && m.has_reference())) {
+            auto saved = m.snapshot(!m.active());
             if (!id(motion_pref).save(&saved) || !global_preferences->sync()) m.fail(now);
           }
           const bool transitioned = was_active != m.active();

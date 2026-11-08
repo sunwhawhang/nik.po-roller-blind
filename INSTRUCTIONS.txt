@@ -618,8 +618,10 @@ it again. Take your time and read as you go.
   Nudge allows a bounded adjustment beyond the old mark. Marking an end
   adjusts its span relative to the opposite end without Start over.
 
-  If power was lost during a move, jog to a marked end and mark it again
-  before normal use.
+  The first mark and travel already completed at a stop survive a restart.
+  If power cuts out during a calibration move, the unfinished measurement
+  is invalid. The page says so; mark a physical end to start a fresh trip.
+  If a calibrated move was interrupted, re-mark a known physical endpoint.
 
 -------------------------------------------------------------------------------
  10. EVERYDAY USE
